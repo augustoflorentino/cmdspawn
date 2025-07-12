@@ -1,0 +1,779 @@
+#include "spawn_internal.h"
+
+#if !defined(_WIN32)
+
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <spawn.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
+
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
+
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#define spw_environ (*_NSGetEnviron())
+#else
+extern char **environ;
+#define spw_environ environ
+#endif
+
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 29)) && !defined(SPW_NO_SPAWN_CHDIR)
+#define SPW_HAVE_SPAWN_CHDIR 1
+#else
+#define SPW_HAVE_SPAWN_CHDIR 0
+#endif
+
+#define SPW_READ_CHUNK 65536
+#define SPW_POLL_SLICE_MS 10
+
+struct spw_proc {
+    struct spw_mem mem;
+    pid_t pid;
+    int pidfd;
+    int fds[3];
+    unsigned char *input;
+    size_t input_len;
+    size_t input_off;
+    struct spw_out out[2];
+    int exited;
+    int exit_code;
+    int signal;
+    int timed_out;
+    long long deadline;
+};
+
+struct spw_prep {
+    char *path;
+    char **argv;
+    char **envp;
+    const char *cwd;
+    int child_fds[3];
+    int parent_fds[3];
+    int null_fd;
+    int merge_err;
+    int err_pipe[2];
+};
+
+static long long spw_now_ms(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void spw_close(int *fd)
+{
+    if (*fd >= 0)
+        close(*fd);
+    *fd = -1;
+}
+
+static int spw_cloexec_above_stdio(int fd)
+{
+    int moved;
+
+    if (fd < 0)
+        return -1;
+    if (fd > 2) {
+        fcntl(fd, F_SETFD, FD_CLOEXEC);
+        return fd;
+    }
+    moved = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+    close(fd);
+    return moved;
+}
+
+static int spw_pipe(int out_fds[2])
+{
+    int fds[2];
+
+    if (pipe(fds) != 0)
+        return SPW_ERR_SPAWN;
+    out_fds[0] = spw_cloexec_above_stdio(fds[0]);
+    out_fds[1] = spw_cloexec_above_stdio(fds[1]);
+    if (out_fds[0] < 0 || out_fds[1] < 0) {
+        spw_close(&out_fds[0]);
+        spw_close(&out_fds[1]);
+        return SPW_ERR_SPAWN;
+    }
+#if defined(F_SETNOSIGPIPE)
+    fcntl(out_fds[0], F_SETNOSIGPIPE, 1);
+    fcntl(out_fds[1], F_SETNOSIGPIPE, 1);
+#endif
+    return SPW_OK;
+}
+
+static int spw_is_executable(const char *path)
+{
+    struct stat st;
+
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode) && access(path, X_OK) == 0;
+}
+
+static char *spw_path_candidate(const struct spw_mem *mem, const char *cwd, const char *dir, size_t dir_len,
+                                const char *name)
+{
+    char *joined;
+    char *full;
+
+    if (dir_len == 0)
+        joined = spw_mem_strdup(mem, name);
+    else
+        joined = spw_mem_join(mem, dir, dir_len, '/', name);
+    if (joined == NULL || cwd == NULL || joined[0] == '/')
+        return joined;
+    full = spw_mem_join(mem, cwd, strlen(cwd), '/', joined);
+    spw_mem_free(mem, joined);
+    return full;
+}
+
+static int spw_resolve(const spw_cmd_t *cmd, char **envp, char **out_path)
+{
+    const char *name = cmd->args[0];
+    const char *dirs = spw_env_find(envp, "PATH", 0);
+    const char *end;
+    char *candidate;
+
+    if ((strchr)(name, '/') != NULL) {
+        *out_path = spw_mem_strdup(&cmd->mem, name);
+        return *out_path ? SPW_OK : SPW_ERR_NOMEM;
+    }
+    if (dirs == NULL)
+        dirs = "/usr/bin:/bin";
+    for (;;) {
+        end = (strchr)(dirs, ':');
+        if (end == NULL)
+            end = dirs + strlen(dirs);
+        candidate = spw_path_candidate(&cmd->mem, cmd->cwd, dirs, (size_t)(end - dirs), name);
+        if (candidate == NULL)
+            return SPW_ERR_NOMEM;
+        if (spw_is_executable(candidate)) {
+            *out_path = candidate;
+            return SPW_OK;
+        }
+        spw_mem_free(&cmd->mem, candidate);
+        if (*end == '\0')
+            return SPW_ERR_NOTFOUND;
+        dirs = end + 1;
+    }
+}
+
+static void spw_prep_init(struct spw_prep *prep)
+{
+    int i;
+
+    memset(prep, 0, sizeof(*prep));
+    for (i = 0; i < 3; i++) {
+        prep->child_fds[i] = -1;
+        prep->parent_fds[i] = -1;
+    }
+    prep->null_fd = -1;
+    prep->err_pipe[0] = -1;
+    prep->err_pipe[1] = -1;
+}
+
+static void spw_prep_close_child(struct spw_prep *prep)
+{
+    int i;
+
+    for (i = 0; i < 3; i++)
+        if (prep->child_fds[i] != prep->null_fd)
+            spw_close(&prep->child_fds[i]);
+    spw_close(&prep->null_fd);
+    for (i = 0; i < 3; i++)
+        prep->child_fds[i] = -1;
+}
+
+static void spw_prep_free(const struct spw_mem *mem, struct spw_prep *prep)
+{
+    int i;
+
+    spw_prep_close_child(prep);
+    for (i = 0; i < 3; i++)
+        spw_close(&prep->parent_fds[i]);
+    spw_close(&prep->err_pipe[0]);
+    spw_close(&prep->err_pipe[1]);
+    spw_mem_free(mem, prep->path);
+    spw_mem_free(mem, prep->argv);
+    spw_mem_free(mem, prep->envp);
+}
+
+static int spw_prep_stream(struct spw_prep *prep, int stream, int mode)
+{
+    int fds[2];
+    int status;
+
+    if (mode == SPW_MERGE) {
+        prep->merge_err = 1;
+        return SPW_OK;
+    }
+    if (mode == SPW_NULL) {
+        if (prep->null_fd < 0)
+            prep->null_fd = spw_cloexec_above_stdio(open("/dev/null", O_RDWR | O_CLOEXEC));
+        prep->child_fds[stream] = prep->null_fd;
+        return prep->null_fd >= 0 ? SPW_OK : SPW_ERR_SPAWN;
+    }
+    if (mode != SPW_PIPE)
+        return SPW_OK;
+    status = spw_pipe(fds);
+    if (status != SPW_OK)
+        return status;
+    prep->child_fds[stream] = stream == SPW_STDIN ? fds[0] : fds[1];
+    prep->parent_fds[stream] = stream == SPW_STDIN ? fds[1] : fds[0];
+    fcntl(prep->parent_fds[stream], F_SETFL, fcntl(prep->parent_fds[stream], F_GETFL) | O_NONBLOCK);
+    return SPW_OK;
+}
+
+static int spw_prepare(const spw_cmd_t *cmd, struct spw_prep *prep)
+{
+    size_t base_len = 0;
+    int status;
+    int i;
+
+    spw_prep_init(prep);
+    while (spw_environ != NULL && spw_environ[base_len] != NULL)
+        base_len++;
+    status = spw_env_merge(cmd, spw_environ, base_len, 0, &prep->envp);
+    if (status == SPW_OK)
+        status = spw_resolve(cmd, prep->envp, &prep->path);
+    if (status != SPW_OK)
+        return status;
+    prep->argv = spw_mem_alloc(&cmd->mem, (cmd->args_len + 1) * sizeof(char *));
+    if (prep->argv == NULL)
+        return SPW_ERR_NOMEM;
+    memcpy(prep->argv, cmd->args, cmd->args_len * sizeof(char *));
+    prep->argv[cmd->args_len] = NULL;
+    prep->cwd = cmd->cwd;
+    for (i = 0; i < 3 && status == SPW_OK; i++)
+        status = spw_prep_stream(prep, i, cmd->modes[i]);
+    return status;
+}
+
+static void spw_child_signals(void)
+{
+    static const int sigs[] = {SIGPIPE, SIGINT, SIGQUIT, SIGTERM, SIGHUP, SIGCHLD, SIGALRM, SIGUSR1, SIGUSR2,
+                               SIGTTIN, SIGTTOU, SIGTSTP};
+    struct sigaction sa;
+    sigset_t empty;
+    size_t i;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = SIG_DFL;
+    for (i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++)
+        sigaction(sigs[i], &sa, NULL);
+    sigemptyset(&empty);
+    sigprocmask(SIG_SETMASK, &empty, NULL);
+}
+
+static void spw_child_fail(int err_fd)
+{
+    int err = errno;
+
+    while (write(err_fd, &err, sizeof(err)) < 0 && errno == EINTR) {
+    }
+    _exit(127);
+}
+
+static void spw_child_exec(const struct spw_prep *prep, int new_group)
+{
+    int i;
+
+    if (new_group)
+        setpgid(0, 0);
+    for (i = 0; i < 3; i++)
+        if (prep->child_fds[i] >= 0 && dup2(prep->child_fds[i], i) < 0)
+            spw_child_fail(prep->err_pipe[1]);
+    if (prep->merge_err && dup2(1, 2) < 0)
+        spw_child_fail(prep->err_pipe[1]);
+    spw_child_signals();
+    if (prep->cwd != NULL && chdir(prep->cwd) != 0)
+        spw_child_fail(prep->err_pipe[1]);
+    execve(prep->path, prep->argv, prep->envp);
+    spw_child_fail(prep->err_pipe[1]);
+}
+
+static int spw_errno_status(int err)
+{
+    if (err == ENOENT || err == ENOTDIR)
+        return SPW_ERR_NOTFOUND;
+    if (err == ENOMEM)
+        return SPW_ERR_NOMEM;
+    return SPW_ERR_SPAWN;
+}
+
+static int spw_read_child_error(struct spw_prep *prep)
+{
+    int err = 0;
+    ssize_t n;
+
+    spw_close(&prep->err_pipe[1]);
+    do
+        n = read(prep->err_pipe[0], &err, sizeof(err));
+    while (n < 0 && errno == EINTR);
+    spw_close(&prep->err_pipe[0]);
+    return n == (ssize_t)sizeof(err) ? spw_errno_status(err) : SPW_OK;
+}
+
+static void spw_reap(pid_t pid)
+{
+    while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {
+    }
+}
+
+static int spw_fork_exec(struct spw_prep *prep, pid_t *out_pid)
+{
+    pid_t pid;
+    int status;
+
+    if (spw_pipe(prep->err_pipe) != SPW_OK)
+        return SPW_ERR_SPAWN;
+    pid = fork();
+    if (pid < 0)
+        return SPW_ERR_SPAWN;
+    if (pid == 0)
+        spw_child_exec(prep, 1);
+    setpgid(pid, pid);
+    status = spw_read_child_error(prep);
+    if (status != SPW_OK) {
+        spw_reap(pid);
+        return status;
+    }
+    *out_pid = pid;
+    return SPW_OK;
+}
+
+static int spw_posix_spawn(struct spw_prep *prep, pid_t *out_pid)
+{
+    posix_spawn_file_actions_t actions;
+    posix_spawnattr_t attr;
+    sigset_t sigs;
+    int err;
+    int i;
+
+    if (posix_spawn_file_actions_init(&actions) != 0)
+        return SPW_ERR_NOMEM;
+    if (posix_spawnattr_init(&attr) != 0) {
+        posix_spawn_file_actions_destroy(&actions);
+        return SPW_ERR_NOMEM;
+    }
+    err = 0;
+    for (i = 0; i < 3 && err == 0; i++)
+        if (prep->child_fds[i] >= 0)
+            err = posix_spawn_file_actions_adddup2(&actions, prep->child_fds[i], i);
+    if (err == 0 && prep->merge_err)
+        err = posix_spawn_file_actions_adddup2(&actions, 1, 2);
+#if SPW_HAVE_SPAWN_CHDIR
+    if (err == 0 && prep->cwd != NULL)
+        err = posix_spawn_file_actions_addchdir_np(&actions, prep->cwd);
+#endif
+    sigemptyset(&sigs);
+    if (err == 0)
+        err = posix_spawnattr_setsigmask(&attr, &sigs);
+    sigaddset(&sigs, SIGPIPE);
+    sigaddset(&sigs, SIGINT);
+    sigaddset(&sigs, SIGQUIT);
+    sigaddset(&sigs, SIGTERM);
+    sigaddset(&sigs, SIGHUP);
+    sigaddset(&sigs, SIGCHLD);
+    sigaddset(&sigs, SIGTTIN);
+    sigaddset(&sigs, SIGTTOU);
+    if (err == 0)
+        err = posix_spawnattr_setsigdefault(&attr, &sigs);
+    if (err == 0)
+        err = posix_spawnattr_setpgroup(&attr, 0);
+    if (err == 0)
+        err = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
+    if (err == 0)
+        err = posix_spawn(out_pid, prep->path, &actions, &attr, prep->argv, prep->envp);
+    posix_spawnattr_destroy(&attr);
+    posix_spawn_file_actions_destroy(&actions);
+    return err == 0 ? SPW_OK : spw_errno_status(err);
+}
+
+static int spw_start(struct spw_prep *prep, pid_t *out_pid)
+{
+    if (prep->cwd == NULL || SPW_HAVE_SPAWN_CHDIR)
+        return spw_posix_spawn(prep, out_pid);
+    return spw_fork_exec(prep, out_pid);
+}
+
+static int spw_open_pidfd(pid_t pid)
+{
+#if defined(__linux__) && defined(SYS_pidfd_open)
+    return (int)syscall(SYS_pidfd_open, pid, 0);
+#else
+    (void)pid;
+    return -1;
+#endif
+}
+
+static int spw_proc_alloc(const spw_cmd_t *cmd, struct spw_prep *prep, spw_proc_t **out_proc)
+{
+    spw_proc_t *proc = spw_mem_alloc(&cmd->mem, sizeof(*proc));
+    int i;
+
+    if (proc == NULL)
+        return SPW_ERR_NOMEM;
+    memset(proc, 0, sizeof(*proc));
+    proc->mem = cmd->mem;
+    proc->pidfd = -1;
+    if (cmd->input_len > 0) {
+        proc->input = spw_mem_alloc(&cmd->mem, cmd->input_len);
+        if (proc->input == NULL) {
+            spw_mem_free(&cmd->mem, proc);
+            return SPW_ERR_NOMEM;
+        }
+        memcpy(proc->input, cmd->input, cmd->input_len);
+        proc->input_len = cmd->input_len;
+    }
+    for (i = 0; i < 3; i++) {
+        proc->fds[i] = prep->parent_fds[i];
+        prep->parent_fds[i] = -1;
+    }
+    *out_proc = proc;
+    return SPW_OK;
+}
+
+int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc)
+{
+    struct spw_prep prep;
+    spw_proc_t *proc = NULL;
+    pid_t pid;
+    int status;
+
+    if (out_proc == NULL)
+        return SPW_ERR_ARG;
+    *out_proc = NULL;
+    status = spw_cmd_check(cmd, 0);
+    if (status != SPW_OK)
+        return status;
+    status = spw_prepare(cmd, &prep);
+    if (status == SPW_OK)
+        status = spw_proc_alloc(cmd, &prep, &proc);
+    if (status == SPW_OK)
+        status = spw_start(&prep, &pid);
+    if (status != SPW_OK) {
+        spw_proc_destroy(proc);
+        spw_prep_free(&cmd->mem, &prep);
+        return status;
+    }
+    spw_prep_free(&cmd->mem, &prep);
+    proc->pid = pid;
+    proc->pidfd = spw_open_pidfd(pid);
+    if (cmd->timeout_ms > 0)
+        proc->deadline = spw_now_ms() + cmd->timeout_ms;
+    if (proc->fds[SPW_STDIN] >= 0 && proc->input_len == 0)
+        spw_close(&proc->fds[SPW_STDIN]);
+    *out_proc = proc;
+    return SPW_OK;
+}
+
+static void spw_detached_middle(struct spw_prep *prep)
+{
+    pid_t pid;
+
+    setsid();
+    pid = fork();
+    if (pid < 0)
+        spw_child_fail(prep->err_pipe[1]);
+    if (pid == 0)
+        spw_child_exec(prep, 0);
+    _exit(0);
+}
+
+int spw_spawn_detached(const spw_cmd_t *cmd)
+{
+    struct spw_prep prep;
+    pid_t pid;
+    int status;
+
+    status = spw_cmd_check(cmd, 1);
+    if (status != SPW_OK)
+        return status;
+    status = spw_prepare(cmd, &prep);
+    if (status == SPW_OK)
+        status = spw_pipe(prep.err_pipe);
+    if (status == SPW_OK) {
+        pid = fork();
+        if (pid == 0)
+            spw_detached_middle(&prep);
+        if (pid < 0)
+            status = SPW_ERR_SPAWN;
+        else
+            status = spw_read_child_error(&prep);
+        if (pid > 0)
+            spw_reap(pid);
+    }
+    spw_prep_free(&cmd->mem, &prep);
+    return status;
+}
+
+static void spw_check_exit(spw_proc_t *proc)
+{
+    int wstatus;
+    pid_t r;
+
+    if (proc->exited)
+        return;
+    do
+        r = waitpid(proc->pid, &wstatus, WNOHANG);
+    while (r < 0 && errno == EINTR);
+    if (r == 0)
+        return;
+    proc->exited = 1;
+    proc->exit_code = -1;
+    if (r < 0)
+        return;
+    if (WIFEXITED(wstatus))
+        proc->exit_code = WEXITSTATUS(wstatus);
+    else if (WIFSIGNALED(wstatus))
+        proc->signal = WTERMSIG(wstatus);
+    spw_close(&proc->pidfd);
+}
+
+static int spw_drain(spw_proc_t *proc, int stream)
+{
+    struct spw_out *out = &proc->out[stream - 1];
+    ssize_t n;
+
+    for (;;) {
+        if (spw_out_reserve(&proc->mem, out, SPW_READ_CHUNK) != SPW_OK)
+            return SPW_ERR_NOMEM;
+        n = read(proc->fds[stream], out->data + out->len, SPW_READ_CHUNK);
+        if (n > 0) {
+            out->len += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return SPW_OK;
+        spw_close(&proc->fds[stream]);
+        return SPW_OK;
+    }
+}
+
+static ssize_t spw_write_nosigpipe(int fd, const void *data, size_t len)
+{
+#if defined(F_SETNOSIGPIPE)
+    return write(fd, data, len);
+#else
+    sigset_t block;
+    sigset_t old;
+    sigset_t pending;
+    ssize_t n;
+    int was_pending;
+    int err;
+
+    sigemptyset(&block);
+    sigaddset(&block, SIGPIPE);
+    sigprocmask(SIG_BLOCK, &block, &old);
+    sigpending(&pending);
+    was_pending = sigismember(&pending, SIGPIPE);
+    n = write(fd, data, len);
+    err = errno;
+    if (n < 0 && err == EPIPE && !was_pending) {
+        struct timespec zero = {0, 0};
+
+        while (sigtimedwait(&block, NULL, &zero) < 0 && errno == EINTR) {
+        }
+    }
+    sigprocmask(SIG_SETMASK, &old, NULL);
+    errno = err;
+    return n;
+#endif
+}
+
+static void spw_feed(spw_proc_t *proc)
+{
+    size_t left = proc->input_len - proc->input_off;
+    ssize_t n;
+
+    while (left > 0) {
+        n = spw_write_nosigpipe(proc->fds[SPW_STDIN], proc->input + proc->input_off, left);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return;
+        if (n <= 0)
+            break;
+        proc->input_off += (size_t)n;
+        left -= (size_t)n;
+    }
+    spw_close(&proc->fds[SPW_STDIN]);
+}
+
+static int spw_poll_once(spw_proc_t *proc, int wait_ms)
+{
+    struct pollfd pfds[4];
+    int streams[4];
+    nfds_t n = 0;
+    nfds_t i;
+    int status = SPW_OK;
+    int s;
+
+    for (s = 0; s < 3; s++) {
+        if (proc->fds[s] < 0)
+            continue;
+        pfds[n].fd = proc->fds[s];
+        pfds[n].events = s == SPW_STDIN ? POLLOUT : POLLIN;
+        pfds[n].revents = 0;
+        streams[n++] = s;
+    }
+    if (proc->pidfd >= 0 && !proc->exited) {
+        pfds[n].fd = proc->pidfd;
+        pfds[n].events = POLLIN;
+        pfds[n].revents = 0;
+        streams[n++] = SPW_PROCESS;
+    }
+    if (poll(n ? pfds : NULL, n, wait_ms) <= 0)
+        return SPW_OK;
+    for (i = 0; i < n && status == SPW_OK; i++) {
+        if (pfds[i].revents == 0 || streams[i] == SPW_PROCESS)
+            continue;
+        if (streams[i] == SPW_STDIN)
+            spw_feed(proc);
+        else
+            status = spw_drain(proc, streams[i]);
+    }
+    return status;
+}
+
+static int spw_done(spw_proc_t *proc)
+{
+    int s;
+
+    if (!proc->exited)
+        return 0;
+    spw_close(&proc->fds[SPW_STDIN]);
+    if (!proc->timed_out)
+        return proc->fds[SPW_STDOUT] < 0 && proc->fds[SPW_STDERR] < 0;
+    for (s = SPW_STDOUT; s <= SPW_STDERR; s++)
+        if (proc->fds[s] >= 0 && spw_drain(proc, s) == SPW_OK)
+            spw_close(&proc->fds[s]);
+    return 1;
+}
+
+static int spw_wait_ms(const spw_proc_t *proc, long long now, long long limit)
+{
+    long long wait = limit;
+
+    if (proc->deadline > 0 && !proc->timed_out && (wait < 0 || proc->deadline - now < wait))
+        wait = proc->deadline - now;
+    if (!proc->exited && proc->pidfd < 0 && (wait < 0 || wait > SPW_POLL_SLICE_MS))
+        wait = SPW_POLL_SLICE_MS;
+    if (wait < 0)
+        return -1;
+    return wait > 1000000 ? 1000000 : (int)wait;
+}
+
+int spw_proc_kill(spw_proc_t *proc)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    if (kill(-proc->pid, SIGKILL) != 0 && !proc->exited)
+        kill(proc->pid, SIGKILL);
+    return SPW_OK;
+}
+
+static int spw_wait_result(const spw_proc_t *proc)
+{
+    return proc->timed_out ? SPW_ERR_TIMEOUT : SPW_OK;
+}
+
+int spw_proc_wait(spw_proc_t *proc, long timeout_ms)
+{
+    long long start = spw_now_ms();
+    long long now = start;
+    long long limit;
+    int status;
+
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    for (;;) {
+        spw_check_exit(proc);
+        if (spw_done(proc))
+            return spw_wait_result(proc);
+        if (proc->deadline > 0 && !proc->timed_out && now >= proc->deadline) {
+            proc->timed_out = 1;
+            spw_proc_kill(proc);
+            continue;
+        }
+        if (timeout_ms >= 0 && now - start >= timeout_ms)
+            return SPW_ERR_AGAIN;
+        limit = timeout_ms < 0 ? -1 : timeout_ms - (now - start);
+        status = spw_poll_once(proc, spw_wait_ms(proc, now, limit));
+        if (status != SPW_OK)
+            return status;
+        now = spw_now_ms();
+    }
+}
+
+void spw_proc_destroy(spw_proc_t *proc)
+{
+    int i;
+
+    if (proc == NULL)
+        return;
+    if (proc->pid > 0 && !proc->exited) {
+        spw_proc_kill(proc);
+        spw_reap(proc->pid);
+    }
+    for (i = 0; i < 3; i++)
+        spw_close(&proc->fds[i]);
+    spw_close(&proc->pidfd);
+    spw_mem_free(&proc->mem, proc->input);
+    spw_mem_free(&proc->mem, proc->out[0].data);
+    spw_mem_free(&proc->mem, proc->out[1].data);
+    spw_mem_free(&proc->mem, proc);
+}
+
+int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    if (!proc->exited)
+        return SPW_ERR_AGAIN;
+    if (out_exit_code != NULL)
+        *out_exit_code = proc->exit_code;
+    if (out_signal != NULL)
+        *out_signal = proc->signal;
+    return SPW_OK;
+}
+
+long spw_proc_pid(const spw_proc_t *proc)
+{
+    return proc ? (long)proc->pid : -1;
+}
+
+spw_handle_t spw_proc_handle(const spw_proc_t *proc, int which)
+{
+    if (proc == NULL || which < SPW_STDIN || which > SPW_PROCESS)
+        return SPW_NO_HANDLE;
+    if (which == SPW_PROCESS)
+        return proc->pidfd;
+    return proc->fds[which];
+}
+
+const unsigned char *spw_proc_output(const spw_proc_t *proc, int stream, size_t *out_len)
+{
+    if (out_len != NULL)
+        *out_len = 0;
+    if (proc == NULL || (stream != SPW_STDOUT && stream != SPW_STDERR))
+        return NULL;
+    if (out_len != NULL)
+        *out_len = proc->out[stream - 1].len;
+    return proc->out[stream - 1].data;
+}
+
+#endif
