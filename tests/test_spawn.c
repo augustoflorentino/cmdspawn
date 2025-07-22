@@ -654,6 +654,41 @@ static void test_path_search(void)
     spw_cmd_destroy(cmd);
 }
 
+#if !defined(_WIN32)
+static void test_relative_path_and_cwd(void)
+{
+    char saved[4096];
+    char dir[4096];
+    const char *args[2];
+    char *base;
+    char *parent;
+    spw_cmd_t *cmd = NULL;
+    spw_proc_t *proc;
+
+    CHECK(getcwd(saved, sizeof(saved)) != NULL);
+    CHECK(helper[0] == '/' && strlen(helper) < sizeof(dir));
+    strcpy(dir, helper);
+    base = strrchr(dir, '/');
+    *base++ = '\0';
+    parent = strrchr(dir, '/');
+    CHECK(parent != NULL && parent != dir);
+    *parent++ = '\0';
+    args[0] = base;
+    args[1] = "cwd";
+    CHECK(spw_cmd_create(NULL, NULL, NULL, &cmd) == SPW_OK);
+    CHECK(spw_cmd_args(cmd, args, 2) == SPW_OK);
+    CHECK(spw_cmd_env(cmd, "PATH", parent) == SPW_OK);
+    CHECK(spw_cmd_cwd(cmd, dir + 1) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(chdir("/") == 0);
+    proc = run_cmd(cmd, SPW_OK);
+    CHECK(chdir(saved) == 0);
+    CHECK(output_is(proc, SPW_STDOUT, dir));
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+#endif
+
 static void test_bad_args(void)
 {
     spw_cmd_t *cmd = NULL;
@@ -762,6 +797,9 @@ int main(int argc, char **argv)
     test_env();
     test_cwd();
     test_path_search();
+#if !defined(_WIN32)
+    test_relative_path_and_cwd();
+#endif
     test_not_found();
     test_poll_and_kill();
     test_destroy_running();

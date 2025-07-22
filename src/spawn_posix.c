@@ -113,28 +113,26 @@ static int spw_pipe(int out_fds[2])
     return SPW_OK;
 }
 
-static int spw_is_executable(const char *path)
+static int spw_is_file_executable(const char *path)
 {
     struct stat st;
 
     return stat(path, &st) == 0 && S_ISREG(st.st_mode) && access(path, X_OK) == 0;
 }
 
-static char *spw_path_candidate(const struct spw_mem *mem, const char *cwd, const char *dir, size_t dir_len,
-                                const char *name)
+static int spw_is_executable(const struct spw_mem *mem, const char *cwd, const char *path)
 {
-    char *joined;
     char *full;
+    int ok;
 
-    if (dir_len == 0)
-        joined = spw_mem_strdup(mem, name);
-    else
-        joined = spw_mem_join(mem, dir, dir_len, '/', name);
-    if (joined == NULL || cwd == NULL || joined[0] == '/')
-        return joined;
-    full = spw_mem_join(mem, cwd, strlen(cwd), '/', joined);
-    spw_mem_free(mem, joined);
-    return full;
+    if (cwd == NULL || path[0] == '/')
+        return spw_is_file_executable(path);
+    full = spw_mem_join(mem, cwd, strlen(cwd), '/', path);
+    if (full == NULL)
+        return -1;
+    ok = spw_is_file_executable(full);
+    spw_mem_free(mem, full);
+    return ok;
 }
 
 static int spw_resolve(const spw_cmd_t *cmd, char **envp, char **out_path)
@@ -143,6 +141,7 @@ static int spw_resolve(const spw_cmd_t *cmd, char **envp, char **out_path)
     const char *dirs = spw_env_find(envp, "PATH", 0);
     const char *end;
     char *candidate;
+    int found;
 
     if ((strchr)(name, '/') != NULL) {
         *out_path = spw_mem_strdup(&cmd->mem, name);
@@ -154,10 +153,14 @@ static int spw_resolve(const spw_cmd_t *cmd, char **envp, char **out_path)
         end = (strchr)(dirs, ':');
         if (end == NULL)
             end = dirs + strlen(dirs);
-        candidate = spw_path_candidate(&cmd->mem, cmd->cwd, dirs, (size_t)(end - dirs), name);
-        if (candidate == NULL)
+        candidate = (end == dirs) ? spw_mem_strdup(&cmd->mem, name)
+                                  : spw_mem_join(&cmd->mem, dirs, (size_t)(end - dirs), '/', name);
+        found = candidate ? spw_is_executable(&cmd->mem, cmd->cwd, candidate) : -1;
+        if (found < 0) {
+            spw_mem_free(&cmd->mem, candidate);
             return SPW_ERR_NOMEM;
-        if (spw_is_executable(candidate)) {
+        }
+        if (found) {
             *out_path = candidate;
             return SPW_OK;
         }
