@@ -1,0 +1,4 @@
+* text=auto eol=lf
+abi/*.abi -diff linguist-generated
+.github/ export-ignore
+fuzz/ export-ignore
