@@ -4,6 +4,15 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+Bug fixes; no change needed in existing code.
+
+- a relative `PATH` entry combined with a relative working directory now finds the program;
+  before, the path checked in the parent was then run again from the child directory
+- `spw_cmd_args` leaves the argument list unchanged when it runs out of memory; before, the
+  arguments copied up to the failure stayed in the list
+- `spw_cmd_stdio` on stdin drops input set earlier by `spw_cmd_input`; before, a later
+  `SPW_PIPE` on stdin still fed the old bytes
+
 ## 0.1.0 - 2025-07-21
 
 First release.
