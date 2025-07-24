@@ -100,7 +100,7 @@ Conventions:
   or feed for stdin) or, for stderr only, `SPW_MERGE` (same destination as stdout)
 - `spw_cmd_input` copies the bytes to feed on stdin and switches stdin to `SPW_PIPE`; stdin is
   closed once everything is written. A stdin pipe without input gives the child an
-  immediate end of file
+  immediate end of file. A later `spw_cmd_stdio` call on stdin drops the input
 - `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
 
 ### Process

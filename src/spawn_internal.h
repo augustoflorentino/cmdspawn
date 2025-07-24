@@ -37,7 +37,6 @@ struct spw_cmd {
     int modes[3];
     unsigned char *input;
     size_t input_len;
-    int has_input;
     long timeout_ms;
 };
 

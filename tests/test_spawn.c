@@ -383,6 +383,11 @@ static void test_empty_input(void)
     proc = run_cmd(cmd, SPW_OK);
     CHECK(output_is(proc, SPW_STDOUT, ""));
     spw_proc_destroy(proc);
+    CHECK(spw_cmd_input(cmd, (const unsigned char *)"stale", 5) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDIN, SPW_PIPE) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    CHECK(output_is(proc, SPW_STDOUT, ""));
+    spw_proc_destroy(proc);
     spw_cmd_destroy(cmd);
 }
 

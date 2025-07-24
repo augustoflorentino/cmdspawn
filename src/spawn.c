@@ -278,8 +278,11 @@ int spw_cmd_stdio(spw_cmd_t *cmd, int stream, int mode)
     if (mode == SPW_MERGE && stream != SPW_STDERR)
         return SPW_ERR_ARG;
     cmd->modes[stream] = mode;
-    if (stream == SPW_STDIN)
-        cmd->has_input = 0;
+    if (stream == SPW_STDIN) {
+        spw_mem_free(&cmd->mem, cmd->input);
+        cmd->input = NULL;
+        cmd->input_len = 0;
+    }
     return SPW_OK;
 }
 
@@ -298,7 +301,6 @@ int spw_cmd_input(spw_cmd_t *cmd, const unsigned char *data, size_t data_len)
     spw_mem_free(&cmd->mem, cmd->input);
     cmd->input = copy;
     cmd->input_len = data_len;
-    cmd->has_input = 1;
     cmd->modes[SPW_STDIN] = SPW_PIPE;
     return SPW_OK;
 }
