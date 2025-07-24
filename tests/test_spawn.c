@@ -754,6 +754,29 @@ static int run_with_failure(failing_alloc_t *fa)
     return status;
 }
 
+static void test_args_failure_keeps_list(void)
+{
+    static const unsigned char input[] = "args kept";
+    failing_alloc_t fa = {3, 0};
+    const char *args[2];
+    spw_cmd_t *cmd = NULL;
+    spw_proc_t *proc;
+
+    args[0] = helper;
+    args[1] = "cat";
+    CHECK(spw_cmd_create(failing_alloc, failing_free, &fa, &cmd) == SPW_OK);
+    CHECK(spw_cmd_args(cmd, args, 2) == SPW_ERR_NOMEM);
+    fa.remaining = -1;
+    CHECK(spw_cmd_args(cmd, args, 2) == SPW_OK);
+    CHECK(spw_cmd_input(cmd, input, sizeof(input) - 1) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    CHECK(output_is(proc, SPW_STDOUT, (const char *)input));
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+    CHECK(fa.live == 0);
+}
+
 static void test_alloc_failure(void)
 {
     int n;
@@ -806,5 +829,6 @@ int main(int argc, char **argv)
     test_timeout_kills_tree();
     test_detached();
     test_alloc_failure();
+    test_args_failure_keeps_list();
     return 0;
 }

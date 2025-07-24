@@ -136,26 +136,36 @@ void spw_cmd_destroy(spw_cmd_t *cmd)
     spw_mem_free(&cmd->mem, cmd);
 }
 
+static int spw_cmd_add_arg(spw_cmd_t *cmd, const char *arg)
+{
+    int status = spw_grow(&cmd->mem, (void **)&cmd->args, sizeof(char *), cmd->args_len, &cmd->args_cap);
+
+    if (status != SPW_OK)
+        return status;
+    cmd->args[cmd->args_len] = spw_mem_strdup(&cmd->mem, arg);
+    if (cmd->args[cmd->args_len] == NULL)
+        return SPW_ERR_NOMEM;
+    cmd->args_len++;
+    return SPW_OK;
+}
+
 int spw_cmd_args(spw_cmd_t *cmd, const char *const *args, size_t args_len)
 {
+    size_t start;
     size_t i;
-    int status;
+    int status = SPW_OK;
 
     if (cmd == NULL || (args == NULL && args_len > 0))
         return SPW_ERR_ARG;
     for (i = 0; i < args_len; i++)
         if (args[i] == NULL)
             return SPW_ERR_ARG;
-    for (i = 0; i < args_len; i++) {
-        status = spw_grow(&cmd->mem, (void **)&cmd->args, sizeof(char *), cmd->args_len, &cmd->args_cap);
-        if (status != SPW_OK)
-            return status;
-        cmd->args[cmd->args_len] = spw_mem_strdup(&cmd->mem, args[i]);
-        if (cmd->args[cmd->args_len] == NULL)
-            return SPW_ERR_NOMEM;
-        cmd->args_len++;
-    }
-    return SPW_OK;
+    start = cmd->args_len;
+    for (i = 0; i < args_len && status == SPW_OK; i++)
+        status = spw_cmd_add_arg(cmd, args[i]);
+    while (status != SPW_OK && cmd->args_len > start)
+        spw_mem_free(&cmd->mem, cmd->args[--cmd->args_len]);
+    return status;
 }
 
 static int spw_name_equal(const char *a, const char *b, size_t len, int fold_case)
