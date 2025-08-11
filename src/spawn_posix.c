@@ -32,7 +32,7 @@ extern char **environ;
 #define SPW_HAVE_SPAWN_CHDIR 0
 #endif
 
-#define SPW_READ_CHUNK 65536
+#define SPW_READ_CHUNK 16384
 #define SPW_POLL_SLICE_MS 10
 
 struct spw_proc {
@@ -439,6 +439,8 @@ static int spw_proc_alloc(const spw_cmd_t *cmd, struct spw_prep *prep, spw_proc_
         memcpy(proc->input, cmd->input, cmd->input_len);
         proc->input_len = cmd->input_len;
     }
+    proc->out[0].limit = cmd->output_limit;
+    proc->out[1].limit = cmd->output_limit;
     for (i = 0; i < 3; i++) {
         proc->fds[i] = prep->parent_fds[i];
         prep->parent_fds[i] = -1;
@@ -547,14 +549,14 @@ static void spw_check_exit(spw_proc_t *proc)
 static int spw_drain(spw_proc_t *proc, int stream)
 {
     struct spw_out *out = &proc->out[stream - 1];
+    unsigned char chunk[SPW_READ_CHUNK];
     ssize_t n;
 
     for (;;) {
-        if (spw_out_reserve(&proc->mem, out, SPW_READ_CHUNK) != SPW_OK)
-            return SPW_ERR_NOMEM;
-        n = read(proc->fds[stream], out->data + out->len, SPW_READ_CHUNK);
+        n = read(proc->fds[stream], chunk, sizeof(chunk));
         if (n > 0) {
-            out->len += (size_t)n;
+            if (spw_out_put(&proc->mem, out, chunk, (size_t)n) != SPW_OK)
+                return SPW_ERR_NOMEM;
             continue;
         }
         if (n < 0 && errno == EINTR)
@@ -777,6 +779,13 @@ const unsigned char *spw_proc_output(const spw_proc_t *proc, int stream, size_t 
     if (out_len != NULL)
         *out_len = proc->out[stream - 1].len;
     return proc->out[stream - 1].data;
+}
+
+size_t spw_proc_dropped(const spw_proc_t *proc, int stream)
+{
+    if (proc == NULL || (stream != SPW_STDOUT && stream != SPW_STDERR))
+        return 0;
+    return proc->out[stream - 1].dropped;
 }
 
 #endif

@@ -76,6 +76,26 @@ int spw_out_reserve(const struct spw_mem *mem, struct spw_out *out, size_t extra
     return SPW_OK;
 }
 
+int spw_out_put(const struct spw_mem *mem, struct spw_out *out, const unsigned char *data, size_t data_len)
+{
+    size_t room = data_len;
+    int status;
+
+    if (out->limit > 0)
+        room = out->len >= out->limit ? 0 : out->limit - out->len;
+    if (room > data_len)
+        room = data_len;
+    out->dropped += data_len - room;
+    if (room == 0)
+        return SPW_OK;
+    status = spw_out_reserve(mem, out, room);
+    if (status != SPW_OK)
+        return status;
+    memcpy(out->data + out->len, data, room);
+    out->len += room;
+    return SPW_OK;
+}
+
 static int spw_grow(const struct spw_mem *mem, void **items, size_t item_size, size_t len, size_t *cap)
 {
     size_t new_cap;
@@ -310,6 +330,14 @@ int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms)
     if (cmd == NULL)
         return SPW_ERR_ARG;
     cmd->timeout_ms = timeout_ms > 0 ? timeout_ms : 0;
+    return SPW_OK;
+}
+
+int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes)
+{
+    if (cmd == NULL)
+        return SPW_ERR_ARG;
+    cmd->output_limit = max_bytes;
     return SPW_OK;
 }
 

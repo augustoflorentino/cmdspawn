@@ -66,6 +66,7 @@ SPW_API int spw_cmd_cwd(spw_cmd_t *cmd, const char *dir);
 SPW_API int spw_cmd_stdio(spw_cmd_t *cmd, int stream, int mode);
 SPW_API int spw_cmd_input(spw_cmd_t *cmd, const unsigned char *data, size_t data_len);
 SPW_API int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms);
+SPW_API int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes);
 
 SPW_API int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc);
 SPW_API int spw_spawn_detached(const spw_cmd_t *cmd);
@@ -77,6 +78,7 @@ SPW_API int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out
 SPW_API long spw_proc_pid(const spw_proc_t *proc);
 SPW_API spw_handle_t spw_proc_handle(const spw_proc_t *proc, int which);
 SPW_API const unsigned char *spw_proc_output(const spw_proc_t *proc, int stream, size_t *out_len);
+SPW_API size_t spw_proc_dropped(const spw_proc_t *proc, int stream);
 
 SPW_API int spw_win_quote(const char *const *args, size_t args_len, char *buf, size_t buf_len, size_t *out_len);
 SPW_API const char *spw_strerror(int status);

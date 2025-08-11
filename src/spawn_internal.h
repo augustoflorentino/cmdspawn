@@ -38,12 +38,15 @@ struct spw_cmd {
     unsigned char *input;
     size_t input_len;
     long timeout_ms;
+    size_t output_limit;
 };
 
 struct spw_out {
     unsigned char *data;
     size_t len;
     size_t cap;
+    size_t limit;
+    size_t dropped;
 };
 
 void *spw_mem_alloc(const struct spw_mem *mem, size_t size);
@@ -51,6 +54,7 @@ void spw_mem_free(const struct spw_mem *mem, void *ptr);
 char *spw_mem_strdup(const struct spw_mem *mem, const char *str);
 char *spw_mem_join(const struct spw_mem *mem, const char *a, size_t a_len, char sep, const char *b);
 int spw_out_reserve(const struct spw_mem *mem, struct spw_out *out, size_t extra);
+int spw_out_put(const struct spw_mem *mem, struct spw_out *out, const unsigned char *data, size_t data_len);
 int spw_env_merge(const spw_cmd_t *cmd, char **base, size_t base_len, int fold_case, char ***out_list);
 const char *spw_env_find(char **list, const char *name, int fold_case);
 int spw_cmd_check(const spw_cmd_t *cmd, int detached);

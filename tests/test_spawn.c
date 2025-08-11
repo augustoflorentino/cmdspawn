@@ -407,6 +407,27 @@ static void test_flood(void)
     err = spw_proc_output(proc, SPW_STDERR, &err_len);
     CHECK(out_len == 8000000 && err_len == 8000000);
     CHECK(out[0] == 'o' && out[out_len - 1] == 'o' && err[0] == 'e' && err[err_len - 1] == 'e');
+    CHECK(spw_proc_dropped(proc, SPW_STDOUT) == 0 && spw_proc_dropped(proc, SPW_STDERR) == 0);
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+
+static void test_output_limit(void)
+{
+    spw_cmd_t *cmd = helper_cmd("flood", "8000000");
+    spw_proc_t *proc;
+    size_t out_len = 0;
+    size_t err_len = 0;
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDERR, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_output_limit(cmd, 1000) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    CHECK(spw_proc_output(proc, SPW_STDOUT, &out_len) != NULL && out_len == 1000);
+    CHECK(spw_proc_output(proc, SPW_STDERR, &err_len) != NULL && err_len == 1000);
+    CHECK(spw_proc_dropped(proc, SPW_STDOUT) == 8000000 - 1000);
+    CHECK(spw_proc_dropped(proc, SPW_STDERR) == 8000000 - 1000);
+    CHECK(spw_proc_dropped(proc, SPW_STDIN) == 0);
     spw_proc_destroy(proc);
     spw_cmd_destroy(cmd);
 }
@@ -708,6 +729,8 @@ static void test_bad_args(void)
     CHECK(spw_cmd_stdio(NULL, SPW_STDOUT, SPW_PIPE) == SPW_ERR_ARG);
     CHECK(spw_cmd_input(NULL, NULL, 0) == SPW_ERR_ARG);
     CHECK(spw_cmd_timeout(NULL, 1) == SPW_ERR_ARG);
+    CHECK(spw_cmd_output_limit(NULL, 1) == SPW_ERR_ARG);
+    CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn_detached(NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_wait(NULL, 0) == SPW_ERR_ARG);
@@ -820,6 +843,7 @@ int main(int argc, char **argv)
     test_stdin_round_trip();
     test_empty_input();
     test_flood();
+    test_output_limit();
     test_merge();
     test_null_stdio();
     test_env();

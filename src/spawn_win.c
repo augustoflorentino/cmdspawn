@@ -487,6 +487,8 @@ static int spw_proc_setup(const spw_cmd_t *cmd, struct spw_wprep *prep, spw_proc
         memcpy(proc->input, cmd->input, cmd->input_len);
         proc->input_len = cmd->input_len;
     }
+    proc->out[0].limit = cmd->output_limit;
+    proc->out[1].limit = cmd->output_limit;
     for (i = 0; i < 3; i++) {
         if (prep->parent[i] == NULL)
             continue;
@@ -630,10 +632,8 @@ static int spw_pipe_complete(spw_proc_t *proc, int stream)
         return spw_pipe_start(proc, stream);
     }
     out = &proc->out[stream - 1];
-    if (spw_out_reserve(&proc->mem, out, n) != SPW_OK)
+    if (spw_out_put(&proc->mem, out, pipe->buf, n) != SPW_OK)
         return SPW_ERR_NOMEM;
-    memcpy(out->data + out->len, pipe->buf, n);
-    out->len += n;
     return spw_pipe_start(proc, stream);
 }
 
@@ -790,6 +790,13 @@ const unsigned char *spw_proc_output(const spw_proc_t *proc, int stream, size_t 
     if (out_len != NULL)
         *out_len = proc->out[stream - 1].len;
     return proc->out[stream - 1].data;
+}
+
+size_t spw_proc_dropped(const spw_proc_t *proc, int stream)
+{
+    if (proc == NULL || (stream != SPW_STDOUT && stream != SPW_STDERR))
+        return 0;
+    return proc->out[stream - 1].dropped;
 }
 
 #endif
