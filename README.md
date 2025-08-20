@@ -102,6 +102,8 @@ Conventions:
   closed once everything is written. A stdin pipe without input gives the child an
   immediate end of file. A later `spw_cmd_stdio` call on stdin drops the input
 - `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
+- `spw_cmd_output_limit` caps the bytes kept per captured stream; `0` (default) means no cap.
+  The child is never blocked: bytes past the cap are read and thrown away
 
 ### Process
 
@@ -115,7 +117,8 @@ Conventions:
   `SPW_ERR_AGAIN` while it runs. A signal gives exit code `-1`; a killed Windows process exits
   with code `1`
 - `spw_proc_output` returns the bytes captured so far; the pointer is valid until the next
-  `spw_proc_wait` or `spw_proc_destroy`
+  `spw_proc_wait` or `spw_proc_destroy`; `spw_proc_dropped` counts the bytes thrown away
+  past the output limit
 - `spw_proc_destroy` on a running process kills its tree and collects it first
 - `spw_proc_handle` gives what an event loop waits on, then call `spw_proc_wait(proc, 0)`:
   - POSIX: the pipe file descriptors for `SPW_STDIN`, `SPW_STDOUT` and `SPW_STDERR`, and for

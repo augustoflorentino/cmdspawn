@@ -4,7 +4,10 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
-Bug fixes; no change needed in existing code.
+New function and bug fixes; no change needed in existing code.
+
+- `spw_cmd_output_limit` and `spw_proc_dropped`: cap the memory a chatty child can make the
+  parent allocate; bytes past the cap are still read, so the child never blocks
 
 - a relative `PATH` entry combined with a relative working directory now finds the program;
   before, the path checked in the parent was then run again from the child directory
