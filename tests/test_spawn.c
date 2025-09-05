@@ -432,6 +432,74 @@ static void test_output_limit(void)
     spw_cmd_destroy(cmd);
 }
 
+typedef struct {
+    size_t bytes[3];
+    int bad;
+} stream_count_t;
+
+static void count_output(void *ctx, int stream, const unsigned char *data, size_t data_len)
+{
+    stream_count_t *count = ctx;
+
+    if (stream != SPW_STDOUT && stream != SPW_STDERR) {
+        count->bad = 1;
+        return;
+    }
+    if (data_len == 0 || data[0] != (stream == SPW_STDOUT ? 'o' : 'e'))
+        count->bad = 1;
+    count->bytes[stream] += data_len;
+}
+
+static void test_output_fn(void)
+{
+    spw_cmd_t *cmd = helper_cmd("flood", "3000000");
+    spw_proc_t *proc;
+    stream_count_t count = {{0, 0, 0}, 0};
+    size_t len = 1;
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDERR, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_output_fn(cmd, count_output, &count) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    CHECK(!count.bad && count.bytes[SPW_STDOUT] == 3000000 && count.bytes[SPW_STDERR] == 3000000);
+    spw_proc_output(proc, SPW_STDOUT, &len);
+    CHECK(len == 0);
+    spw_proc_destroy(proc);
+    CHECK(spw_cmd_output_fn(cmd, NULL, NULL) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    spw_proc_output(proc, SPW_STDOUT, &len);
+    CHECK(len == 3000000);
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+
+#if !defined(_WIN32)
+static void test_terminate(void)
+{
+    spw_cmd_t *cmd = helper_cmd("graceful", NULL);
+    spw_proc_t *proc = NULL;
+    size_t len = 0;
+    int code = 0;
+    int sig = -1;
+    int i;
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_spawn(cmd, &proc) == SPW_OK);
+    for (i = 0; i < 500 && len < 6; i++) {
+        CHECK(spw_proc_wait(proc, 10) == SPW_ERR_AGAIN);
+        spw_proc_output(proc, SPW_STDOUT, &len);
+    }
+    CHECK(output_is(proc, SPW_STDOUT, "ready\n"));
+    CHECK(spw_proc_terminate(proc) == SPW_OK);
+    CHECK(spw_proc_wait(proc, -1) == SPW_OK);
+    CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
+    CHECK(code == 5 && sig == 0);
+    CHECK(output_is(proc, SPW_STDOUT, "ready\nbye\n"));
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+#endif
+
 static void test_merge(void)
 {
     spw_cmd_t *cmd = helper_cmd("outerr", NULL);
@@ -576,6 +644,9 @@ static void test_poll_and_kill(void)
     CHECK(spw_proc_handle(proc, 9) == SPW_NO_HANDLE);
 #if defined(_WIN32) || defined(__linux__)
     CHECK(spw_proc_handle(proc, SPW_PROCESS) != SPW_NO_HANDLE);
+#endif
+#if defined(_WIN32)
+    CHECK(spw_proc_terminate(proc) == SPW_ERR_UNSUPPORTED);
 #endif
     CHECK(spw_proc_kill(proc) == SPW_OK);
     CHECK(spw_proc_wait(proc, -1) == SPW_OK);
@@ -730,6 +801,8 @@ static void test_bad_args(void)
     CHECK(spw_cmd_input(NULL, NULL, 0) == SPW_ERR_ARG);
     CHECK(spw_cmd_timeout(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_cmd_output_limit(NULL, 1) == SPW_ERR_ARG);
+    CHECK(spw_cmd_output_fn(NULL, NULL, NULL) == SPW_ERR_ARG);
+    CHECK(spw_proc_terminate(NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn_detached(NULL) == SPW_ERR_ARG);
@@ -844,6 +917,10 @@ int main(int argc, char **argv)
     test_empty_input();
     test_flood();
     test_output_limit();
+    test_output_fn();
+#if !defined(_WIN32)
+    test_terminate();
+#endif
     test_merge();
     test_null_stdio();
     test_env();

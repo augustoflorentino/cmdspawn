@@ -56,6 +56,7 @@ typedef struct spw_proc spw_proc_t;
 
 typedef void *(*spw_alloc_fn)(void *ctx, size_t size);
 typedef void (*spw_free_fn)(void *ctx, void *ptr);
+typedef void (*spw_output_fn)(void *ctx, int stream, const unsigned char *data, size_t data_len);
 
 SPW_API int spw_cmd_create(spw_alloc_fn alloc_fn, spw_free_fn free_fn, void *alloc_ctx, spw_cmd_t **out_cmd);
 SPW_API void spw_cmd_destroy(spw_cmd_t *cmd);
@@ -67,6 +68,7 @@ SPW_API int spw_cmd_stdio(spw_cmd_t *cmd, int stream, int mode);
 SPW_API int spw_cmd_input(spw_cmd_t *cmd, const unsigned char *data, size_t data_len);
 SPW_API int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms);
 SPW_API int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes);
+SPW_API int spw_cmd_output_fn(spw_cmd_t *cmd, spw_output_fn output_fn, void *output_ctx);
 
 SPW_API int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc);
 SPW_API int spw_spawn_detached(const spw_cmd_t *cmd);
@@ -74,6 +76,7 @@ SPW_API int spw_spawn_detached(const spw_cmd_t *cmd);
 SPW_API void spw_proc_destroy(spw_proc_t *proc);
 SPW_API int spw_proc_wait(spw_proc_t *proc, long timeout_ms);
 SPW_API int spw_proc_kill(spw_proc_t *proc);
+SPW_API int spw_proc_terminate(spw_proc_t *proc);
 SPW_API int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal);
 SPW_API long spw_proc_pid(const spw_proc_t *proc);
 SPW_API spw_handle_t spw_proc_handle(const spw_proc_t *proc, int which);

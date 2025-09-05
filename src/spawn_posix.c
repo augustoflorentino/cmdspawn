@@ -439,8 +439,8 @@ static int spw_proc_alloc(const spw_cmd_t *cmd, struct spw_prep *prep, spw_proc_
         memcpy(proc->input, cmd->input, cmd->input_len);
         proc->input_len = cmd->input_len;
     }
-    proc->out[0].limit = cmd->output_limit;
-    proc->out[1].limit = cmd->output_limit;
+    spw_out_init(cmd, &proc->out[0], SPW_STDOUT);
+    spw_out_init(cmd, &proc->out[1], SPW_STDERR);
     for (i = 0; i < 3; i++) {
         proc->fds[i] = prep->parent_fds[i];
         prep->parent_fds[i] = -1;
@@ -688,6 +688,15 @@ int spw_proc_kill(spw_proc_t *proc)
         return SPW_ERR_ARG;
     if (kill(-proc->pid, SIGKILL) != 0 && !proc->exited)
         kill(proc->pid, SIGKILL);
+    return SPW_OK;
+}
+
+int spw_proc_terminate(spw_proc_t *proc)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    if (kill(-proc->pid, SIGTERM) != 0 && !proc->exited)
+        kill(proc->pid, SIGTERM);
     return SPW_OK;
 }
 

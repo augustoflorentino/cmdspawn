@@ -487,8 +487,8 @@ static int spw_proc_setup(const spw_cmd_t *cmd, struct spw_wprep *prep, spw_proc
         memcpy(proc->input, cmd->input, cmd->input_len);
         proc->input_len = cmd->input_len;
     }
-    proc->out[0].limit = cmd->output_limit;
-    proc->out[1].limit = cmd->output_limit;
+    spw_out_init(cmd, &proc->out[0], SPW_STDOUT);
+    spw_out_init(cmd, &proc->out[1], SPW_STDERR);
     for (i = 0; i < 3; i++) {
         if (prep->parent[i] == NULL)
             continue;
@@ -701,6 +701,13 @@ int spw_proc_kill(spw_proc_t *proc)
     if (!proc->exited)
         TerminateProcess(proc->process, 1);
     return SPW_OK;
+}
+
+int spw_proc_terminate(spw_proc_t *proc)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    return SPW_ERR_UNSUPPORTED;
 }
 
 int spw_proc_wait(spw_proc_t *proc, long timeout_ms)

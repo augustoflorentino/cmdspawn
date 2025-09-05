@@ -39,6 +39,8 @@ struct spw_cmd {
     size_t input_len;
     long timeout_ms;
     size_t output_limit;
+    spw_output_fn output_fn;
+    void *output_ctx;
 };
 
 struct spw_out {
@@ -47,6 +49,9 @@ struct spw_out {
     size_t cap;
     size_t limit;
     size_t dropped;
+    spw_output_fn fn;
+    void *fn_ctx;
+    int stream;
 };
 
 void *spw_mem_alloc(const struct spw_mem *mem, size_t size);
@@ -58,5 +63,6 @@ int spw_out_put(const struct spw_mem *mem, struct spw_out *out, const unsigned c
 int spw_env_merge(const spw_cmd_t *cmd, char **base, size_t base_len, int fold_case, char ***out_list);
 const char *spw_env_find(char **list, const char *name, int fold_case);
 int spw_cmd_check(const spw_cmd_t *cmd, int detached);
+void spw_out_init(const spw_cmd_t *cmd, struct spw_out *out, int stream);
 
 #endif

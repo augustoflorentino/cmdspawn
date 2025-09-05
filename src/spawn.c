@@ -81,6 +81,10 @@ int spw_out_put(const struct spw_mem *mem, struct spw_out *out, const unsigned c
     size_t room = data_len;
     int status;
 
+    if (out->fn != NULL) {
+        out->fn(out->fn_ctx, out->stream, data, data_len);
+        return SPW_OK;
+    }
     if (out->limit > 0)
         room = out->len >= out->limit ? 0 : out->limit - out->len;
     if (room > data_len)
@@ -339,6 +343,23 @@ int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes)
         return SPW_ERR_ARG;
     cmd->output_limit = max_bytes;
     return SPW_OK;
+}
+
+int spw_cmd_output_fn(spw_cmd_t *cmd, spw_output_fn output_fn, void *output_ctx)
+{
+    if (cmd == NULL)
+        return SPW_ERR_ARG;
+    cmd->output_fn = output_fn;
+    cmd->output_ctx = output_ctx;
+    return SPW_OK;
+}
+
+void spw_out_init(const spw_cmd_t *cmd, struct spw_out *out, int stream)
+{
+    out->limit = cmd->output_limit;
+    out->fn = cmd->output_fn;
+    out->fn_ctx = cmd->output_ctx;
+    out->stream = stream;
 }
 
 int spw_cmd_check(const spw_cmd_t *cmd, int detached)

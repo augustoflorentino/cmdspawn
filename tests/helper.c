@@ -215,6 +215,25 @@ static int cmd_tree(long ms)
     return 0;
 }
 
+static void on_term(int sig)
+{
+    static const char bye[] = "bye\n";
+
+    (void)sig;
+    if (write(1, bye, sizeof(bye) - 1) < 0)
+        _exit(6);
+    _exit(5);
+}
+
+static int cmd_graceful(void)
+{
+    signal(SIGTERM, on_term);
+    printf("ready\n");
+    fflush(stdout);
+    pause_ms(30000);
+    return 0;
+}
+
 static int run(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -257,6 +276,8 @@ static int run(int argc, char **argv)
     if (strcmp(mode, "touch") == 0 && argc > 2)
         return cmd_touch(argv[2]);
 #if !defined(_WIN32)
+    if (strcmp(mode, "graceful") == 0)
+        return cmd_graceful();
     if (strcmp(mode, "signal") == 0) {
         signal((int)n, SIG_DFL);
         raise((int)n);
