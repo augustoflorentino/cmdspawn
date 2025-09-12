@@ -104,6 +104,9 @@ Conventions:
 - `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
 - `spw_cmd_output_limit` caps the bytes kept per captured stream; `0` (default) means no cap.
   The child is never blocked: bytes past the cap are read and thrown away
+- `spw_cmd_output_fn` hands each captured chunk to a callback, from inside `spw_proc_wait`,
+  instead of keeping it: `spw_proc_output` then stays empty and the limit does not apply.
+  `NULL` goes back to keeping the bytes
 
 ### Process
 
@@ -113,6 +116,9 @@ Conventions:
   When the command time limit passes, the whole tree is killed and `SPW_ERR_TIMEOUT` is
   returned from then on
 - `spw_proc_kill` kills the whole tree now; `spw_proc_wait` then collects it
+- `spw_proc_terminate` asks the whole tree to stop (`SIGTERM`), so it can clean up; follow
+  with `spw_proc_kill` if it does not. Windows has no such request for a console-less child:
+  `SPW_ERR_UNSUPPORTED`
 - `spw_proc_status` gives the exit code and the signal (POSIX) that ended the process;
   `SPW_ERR_AGAIN` while it runs. A signal gives exit code `-1`; a killed Windows process exits
   with code `1`
