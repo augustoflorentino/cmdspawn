@@ -4,6 +4,15 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 0.5.0 - 2025-09-21
+
+New functions; no change needed in existing code.
+
+- `spw_cmd_output_fn`: stream captured output to a callback chunk by chunk instead of keeping
+  it in memory, for long-running children and progress display
+- `spw_proc_terminate`: send `SIGTERM` to the whole tree so the child can clean up before a
+  `spw_proc_kill`; `SPW_ERR_UNSUPPORTED` on Windows
+
 ## 0.2.0 - 2025-08-19
 
 New function and bug fixes; no change needed in existing code.
