@@ -674,36 +674,41 @@ static void test_destroy_running(void)
     spw_cmd_destroy(cmd);
 }
 
-static int file_exists(const char *path)
+static long file_number(const char *path)
 {
     FILE *f = fopen(path, "r");
+    long value = 0;
 
     if (f == NULL)
         return 0;
+    if (fscanf(f, "%ld", &value) != 1)
+        value = 0;
     fclose(f);
-    return 1;
+    return value;
 }
 
 static void test_detached(void)
 {
     char path[512];
     spw_cmd_t *cmd;
+    long pid = 0;
     int i;
 
     snprintf(path, sizeof(path), "%s.detached", helper);
     remove(path);
     cmd = helper_cmd("touch", path);
     CHECK(spw_cmd_stdio(cmd, SPW_STDIN, SPW_NULL) == SPW_OK);
-    CHECK(spw_spawn_detached(cmd) == SPW_OK);
+    CHECK(spw_spawn_detached(cmd, &pid) == SPW_OK);
+    CHECK(pid > 0);
 #if !defined(_WIN32)
     CHECK(waitpid(-1, NULL, WNOHANG) < 0 && errno == ECHILD);
 #endif
-    for (i = 0; i < 200 && !file_exists(path); i++)
+    for (i = 0; i < 200 && file_number(path) == 0; i++)
         pause_ms(25);
-    CHECK(file_exists(path));
+    CHECK(file_number(path) == pid);
     remove(path);
     CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
-    CHECK(spw_spawn_detached(cmd) == SPW_ERR_ARG);
+    CHECK(spw_spawn_detached(cmd, NULL) == SPW_ERR_ARG);
     spw_cmd_destroy(cmd);
 }
 
@@ -718,7 +723,7 @@ static void test_not_found(void)
     CHECK(spw_spawn(cmd, &proc) == SPW_ERR_ARG);
     CHECK(spw_cmd_args(cmd, missing, 1) == SPW_OK);
     CHECK(spw_spawn(cmd, &proc) == SPW_ERR_NOTFOUND);
-    CHECK(spw_spawn_detached(cmd) == SPW_ERR_NOTFOUND);
+    CHECK(spw_spawn_detached(cmd, NULL) == SPW_ERR_NOTFOUND);
     spw_cmd_destroy(cmd);
     CHECK(spw_cmd_create(NULL, NULL, NULL, &cmd) == SPW_OK);
     CHECK(spw_cmd_args(cmd, missing_path, 1) == SPW_OK);
@@ -805,7 +810,7 @@ static void test_bad_args(void)
     CHECK(spw_proc_terminate(NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
-    CHECK(spw_spawn_detached(NULL) == SPW_ERR_ARG);
+    CHECK(spw_spawn_detached(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_wait(NULL, 0) == SPW_ERR_ARG);
     CHECK(spw_proc_kill(NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_status(NULL, NULL, NULL) == SPW_ERR_ARG);

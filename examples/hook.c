@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     if (status == SPW_OK)
         status = spw_cmd_stdio(cmd, SPW_STDIN, SPW_NULL);
     if (status == SPW_OK)
-        status = spw_spawn_detached(cmd);
+        status = spw_spawn_detached(cmd, NULL);
     spw_cmd_destroy(cmd);
     if (status != SPW_OK) {
         fprintf(stderr, "error: %s\n", spw_strerror(status));

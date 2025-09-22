@@ -278,12 +278,24 @@ static void spw_child_signals(void)
     sigprocmask(SIG_SETMASK, &empty, NULL);
 }
 
+struct spw_child_msg {
+    int kind;
+    int value;
+};
+
+static void spw_child_send(int fd, int kind, int value)
+{
+    struct spw_child_msg msg;
+
+    msg.kind = kind;
+    msg.value = value;
+    while (write(fd, &msg, sizeof(msg)) < 0 && errno == EINTR) {
+    }
+}
+
 static void spw_child_fail(int err_fd)
 {
-    int err = errno;
-
-    while (write(err_fd, &err, sizeof(err)) < 0 && errno == EINTR) {
-    }
+    spw_child_send(err_fd, 0, errno);
     _exit(127);
 }
 
@@ -314,17 +326,26 @@ static int spw_errno_status(int err)
     return SPW_ERR_SPAWN;
 }
 
-static int spw_read_child_error(struct spw_prep *prep)
+static int spw_read_child(struct spw_prep *prep, pid_t *out_pid)
 {
-    int err = 0;
+    struct spw_child_msg msg;
+    int status = SPW_OK;
     ssize_t n;
 
     spw_close(&prep->err_pipe[1]);
-    do
-        n = read(prep->err_pipe[0], &err, sizeof(err));
-    while (n < 0 && errno == EINTR);
+    for (;;) {
+        n = read(prep->err_pipe[0], &msg, sizeof(msg));
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n != (ssize_t)sizeof(msg))
+            break;
+        if (msg.kind == 0)
+            status = spw_errno_status(msg.value);
+        else if (out_pid != NULL)
+            *out_pid = (pid_t)msg.value;
+    }
     spw_close(&prep->err_pipe[0]);
-    return n == (ssize_t)sizeof(err) ? spw_errno_status(err) : SPW_OK;
+    return status;
 }
 
 static void spw_reap(pid_t pid)
@@ -346,7 +367,7 @@ static int spw_fork_exec(struct spw_prep *prep, pid_t *out_pid)
     if (pid == 0)
         spw_child_exec(prep, 1);
     setpgid(pid, pid);
-    status = spw_read_child_error(prep);
+    status = spw_read_child(prep, NULL);
     if (status != SPW_OK) {
         spw_reap(pid);
         return status;
@@ -493,15 +514,19 @@ static void spw_detached_middle(struct spw_prep *prep)
         spw_child_fail(prep->err_pipe[1]);
     if (pid == 0)
         spw_child_exec(prep, 0);
+    spw_child_send(prep->err_pipe[1], 1, (int)pid);
     _exit(0);
 }
 
-int spw_spawn_detached(const spw_cmd_t *cmd)
+int spw_spawn_detached(const spw_cmd_t *cmd, long *out_pid)
 {
     struct spw_prep prep;
     pid_t pid;
+    pid_t child = -1;
     int status;
 
+    if (out_pid != NULL)
+        *out_pid = -1;
     status = spw_cmd_check(cmd, 1);
     if (status != SPW_OK)
         return status;
@@ -515,11 +540,13 @@ int spw_spawn_detached(const spw_cmd_t *cmd)
         if (pid < 0)
             status = SPW_ERR_SPAWN;
         else
-            status = spw_read_child_error(&prep);
+            status = spw_read_child(&prep, &child);
         if (pid > 0)
             spw_reap(pid);
     }
     spw_prep_free(&cmd->mem, &prep);
+    if (status == SPW_OK && out_pid != NULL)
+        *out_pid = (long)child;
     return status;
 }
 

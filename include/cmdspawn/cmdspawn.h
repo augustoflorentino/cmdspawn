@@ -71,7 +71,7 @@ SPW_API int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes);
 SPW_API int spw_cmd_output_fn(spw_cmd_t *cmd, spw_output_fn output_fn, void *output_ctx);
 
 SPW_API int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc);
-SPW_API int spw_spawn_detached(const spw_cmd_t *cmd);
+SPW_API int spw_spawn_detached(const spw_cmd_t *cmd, long *out_pid);
 
 SPW_API void spw_proc_destroy(spw_proc_t *proc);
 SPW_API int spw_proc_wait(spw_proc_t *proc, long timeout_ms);

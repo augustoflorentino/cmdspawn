@@ -102,12 +102,21 @@ static int cmd_env(const char *name)
 
 static int cmd_touch(const char *path)
 {
-    FILE *f = fopen(path, "w");
+    char tmp[1024];
+    FILE *f;
 
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    f = fopen(tmp, "w");
     if (f == NULL)
         return 1;
+#if defined(_WIN32)
+    fprintf(f, "%lu\n", (unsigned long)GetCurrentProcessId());
+#else
+    fprintf(f, "%ld\n", (long)getpid());
+#endif
     fclose(f);
-    return 0;
+    remove(path);
+    return rename(tmp, path) != 0;
 }
 
 #if defined(_WIN32)

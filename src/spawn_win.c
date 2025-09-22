@@ -549,12 +549,14 @@ int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc)
     return SPW_OK;
 }
 
-int spw_spawn_detached(const spw_cmd_t *cmd)
+int spw_spawn_detached(const spw_cmd_t *cmd, long *out_pid)
 {
     struct spw_wprep prep;
     PROCESS_INFORMATION pi;
     int status;
 
+    if (out_pid != NULL)
+        *out_pid = -1;
     status = spw_cmd_check(cmd, 1);
     if (status != SPW_OK)
         return status;
@@ -566,6 +568,8 @@ int spw_spawn_detached(const spw_cmd_t *cmd)
         return status;
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
+    if (out_pid != NULL)
+        *out_pid = (long)pi.dwProcessId;
     return SPW_OK;
 }
 
