@@ -4,6 +4,22 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 1.0.0 - 2025-09-21
+
+The interface is stable from here on: incompatible changes only in a new major version, with
+the soname bumped. The ABI baseline is recorded in `abi/cmdspawn.abi`.
+
+- `spw_spawn_detached` takes a second parameter, `long *out_pid`, that receives the process id
+  of the detached program (or `-1` on failure); before, a daemon started this way could not be
+  tracked or stopped
+- soname `libcmdspawn.so.1`
+
+### Upgrading
+
+- add `NULL` as the second argument of `spw_spawn_detached` to keep the old behavior, or pass a
+  `long` to receive the pid
+- rebuild against the new header; programs linked to `libcmdspawn.so.0` keep using the old library
+
 ## 0.5.0 - 2025-09-21
 
 New functions; no change needed in existing code.
