@@ -135,7 +135,8 @@ Conventions:
 
 ### Detached
 
-`spw_spawn_detached` starts the program and forgets it. On POSIX it runs in a new session,
+`spw_spawn_detached(cmd, &pid)` starts the program and forgets it; `pid` (or `NULL`) receives
+the program's process id, to write a pid file or stop it later. On POSIX it runs in a new session,
 through an intermediate process that exits at once, so no zombie is left; on Windows it is
 not put in a job and gets its own process group. Pipes are not allowed;
 inherit or `SPW_NULL` only.
