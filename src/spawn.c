@@ -337,6 +337,22 @@ int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms)
     return SPW_OK;
 }
 
+int spw_cmd_same_group(spw_cmd_t *cmd, int enabled)
+{
+    if (cmd == NULL)
+        return SPW_ERR_ARG;
+    cmd->same_group = enabled != 0;
+    return SPW_OK;
+}
+
+int spw_cmd_kill_grace(spw_cmd_t *cmd, long grace_ms)
+{
+    if (cmd == NULL)
+        return SPW_ERR_ARG;
+    cmd->grace_ms = grace_ms > 0 ? grace_ms : 0;
+    return SPW_OK;
+}
+
 int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes)
 {
     if (cmd == NULL)

@@ -243,6 +243,15 @@ static int cmd_graceful(void)
     return 0;
 }
 
+static int cmd_stubborn(void)
+{
+    signal(SIGTERM, SIG_IGN);
+    printf("ready\n");
+    fflush(stdout);
+    pause_ms(30000);
+    return 0;
+}
+
 static int run(int argc, char **argv);
 
 int main(int argc, char **argv)
@@ -287,6 +296,12 @@ static int run(int argc, char **argv)
 #if !defined(_WIN32)
     if (strcmp(mode, "graceful") == 0)
         return cmd_graceful();
+    if (strcmp(mode, "stubborn") == 0)
+        return cmd_stubborn();
+    if (strcmp(mode, "pgid") == 0) {
+        printf("%ld", (long)getpgrp());
+        return 0;
+    }
     if (strcmp(mode, "signal") == 0) {
         signal((int)n, SIG_DFL);
         raise((int)n);

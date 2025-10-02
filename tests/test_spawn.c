@@ -500,6 +500,78 @@ static void test_terminate(void)
 }
 #endif
 
+#if !defined(_WIN32)
+static long run_pgid(int same_group, long *out_pid)
+{
+    spw_cmd_t *cmd = helper_cmd("pgid", NULL);
+    spw_proc_t *proc;
+    size_t len = 0;
+    char text[32];
+    const unsigned char *out;
+
+    CHECK(spw_cmd_same_group(cmd, same_group) == SPW_OK);
+    CHECK(spw_cmd_cwd(cmd, "/") == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    proc = run_cmd(cmd, SPW_OK);
+    out = spw_proc_output(proc, SPW_STDOUT, &len);
+    CHECK(len > 0 && len < sizeof(text));
+    memcpy(text, out, len);
+    text[len] = '\0';
+    *out_pid = spw_proc_pid(proc);
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+    return strtol(text, NULL, 10);
+}
+
+static void test_same_group(void)
+{
+    long pid = 0;
+
+    CHECK(run_pgid(0, &pid) == pid);
+    CHECK(run_pgid(1, &pid) == (long)getpgrp());
+}
+
+static long elapsed_ms(struct timespec *start)
+{
+    struct timespec now;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (long)((now.tv_sec - start->tv_sec) * 1000 + (now.tv_nsec - start->tv_nsec) / 1000000);
+}
+
+static void test_kill_grace(void)
+{
+    spw_cmd_t *cmd = helper_cmd("graceful", NULL);
+    spw_proc_t *proc;
+    struct timespec start;
+    int code = 0;
+    int sig = -1;
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_timeout(cmd, 500) == SPW_OK);
+    CHECK(spw_cmd_kill_grace(cmd, 20000) == SPW_OK);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    proc = run_cmd(cmd, SPW_ERR_TIMEOUT);
+    CHECK(elapsed_ms(&start) < 10000);
+    CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
+    CHECK(code == 5 && sig == 0);
+    CHECK(output_is(proc, SPW_STDOUT, "ready\nbye\n"));
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+    cmd = helper_cmd("stubborn", NULL);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_timeout(cmd, 300) == SPW_OK);
+    CHECK(spw_cmd_kill_grace(cmd, 400) == SPW_OK);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    proc = run_cmd(cmd, SPW_ERR_TIMEOUT);
+    CHECK(elapsed_ms(&start) >= 650 && elapsed_ms(&start) < 10000);
+    CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
+    CHECK(code == -1 && sig == SIGKILL);
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+#endif
+
 static void test_merge(void)
 {
     spw_cmd_t *cmd = helper_cmd("outerr", NULL);
@@ -808,6 +880,8 @@ static void test_bad_args(void)
     CHECK(spw_cmd_output_limit(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_cmd_output_fn(NULL, NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_terminate(NULL) == SPW_ERR_ARG);
+    CHECK(spw_cmd_same_group(NULL, 1) == SPW_ERR_ARG);
+    CHECK(spw_cmd_kill_grace(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn_detached(NULL, NULL) == SPW_ERR_ARG);
@@ -925,6 +999,8 @@ int main(int argc, char **argv)
     test_output_fn();
 #if !defined(_WIN32)
     test_terminate();
+    test_same_group();
+    test_kill_grace();
 #endif
     test_merge();
     test_null_stdio();

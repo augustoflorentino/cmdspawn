@@ -48,7 +48,10 @@ struct spw_proc {
     int exit_code;
     int signal;
     int timed_out;
+    int own_group;
+    long grace_ms;
     long long deadline;
+    long long kill_at;
 };
 
 struct spw_prep {
@@ -60,6 +63,7 @@ struct spw_prep {
     int parent_fds[3];
     int null_fd;
     int merge_err;
+    int own_group;
     int err_pipe[2];
 };
 
@@ -257,6 +261,7 @@ static int spw_prepare(const spw_cmd_t *cmd, struct spw_prep *prep)
     memcpy(prep->argv, cmd->args, cmd->args_len * sizeof(char *));
     prep->argv[cmd->args_len] = NULL;
     prep->cwd = cmd->cwd;
+    prep->own_group = !cmd->same_group;
     for (i = 0; i < 3 && status == SPW_OK; i++)
         status = spw_prep_stream(prep, i, cmd->modes[i]);
     return status;
@@ -365,8 +370,9 @@ static int spw_fork_exec(struct spw_prep *prep, pid_t *out_pid)
     if (pid < 0)
         return SPW_ERR_SPAWN;
     if (pid == 0)
-        spw_child_exec(prep, 1);
-    setpgid(pid, pid);
+        spw_child_exec(prep, prep->own_group);
+    if (prep->own_group)
+        setpgid(pid, pid);
     status = spw_read_child(prep, NULL);
     if (status != SPW_OK) {
         spw_reap(pid);
@@ -416,7 +422,8 @@ static int spw_posix_spawn(struct spw_prep *prep, pid_t *out_pid)
     if (err == 0)
         err = posix_spawnattr_setpgroup(&attr, 0);
     if (err == 0)
-        err = posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
+        err = posix_spawnattr_setflags(&attr, (prep->own_group ? POSIX_SPAWN_SETPGROUP : 0) | POSIX_SPAWN_SETSIGMASK |
+                                                  POSIX_SPAWN_SETSIGDEF);
     if (err == 0)
         err = posix_spawn(out_pid, prep->path, &actions, &attr, prep->argv, prep->envp);
     posix_spawnattr_destroy(&attr);
@@ -498,6 +505,8 @@ int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc)
     proc->pidfd = spw_open_pidfd(pid);
     if (cmd->timeout_ms > 0)
         proc->deadline = spw_now_ms() + cmd->timeout_ms;
+    proc->own_group = !cmd->same_group;
+    proc->grace_ms = cmd->grace_ms;
     if (proc->fds[SPW_STDIN] >= 0 && proc->input_len == 0)
         spw_close(&proc->fds[SPW_STDIN]);
     *out_proc = proc;
@@ -696,12 +705,20 @@ static int spw_done(spw_proc_t *proc)
     return 1;
 }
 
+static long long spw_next_deadline(const spw_proc_t *proc)
+{
+    if (proc->deadline > 0 && !proc->timed_out)
+        return proc->deadline;
+    return proc->kill_at;
+}
+
 static int spw_wait_ms(const spw_proc_t *proc, long long now, long long limit)
 {
     long long wait = limit;
+    long long next = spw_next_deadline(proc);
 
-    if (proc->deadline > 0 && !proc->timed_out && (wait < 0 || proc->deadline - now < wait))
-        wait = proc->deadline - now;
+    if (next > 0 && (wait < 0 || next - now < wait))
+        wait = next - now < 0 ? 0 : next - now;
     if (!proc->exited && proc->pidfd < 0 && (wait < 0 || wait > SPW_POLL_SLICE_MS))
         wait = SPW_POLL_SLICE_MS;
     if (wait < 0)
@@ -709,12 +726,20 @@ static int spw_wait_ms(const spw_proc_t *proc, long long now, long long limit)
     return wait > 1000000 ? 1000000 : (int)wait;
 }
 
+static void spw_signal_tree(spw_proc_t *proc, int sig)
+{
+    if (proc->own_group && kill(-proc->pid, sig) == 0)
+        return;
+    if (!proc->exited)
+        kill(proc->pid, sig);
+}
+
 int spw_proc_kill(spw_proc_t *proc)
 {
     if (proc == NULL)
         return SPW_ERR_ARG;
-    if (kill(-proc->pid, SIGKILL) != 0 && !proc->exited)
-        kill(proc->pid, SIGKILL);
+    spw_signal_tree(proc, SIGKILL);
+    proc->kill_at = 0;
     return SPW_OK;
 }
 
@@ -722,9 +747,19 @@ int spw_proc_terminate(spw_proc_t *proc)
 {
     if (proc == NULL)
         return SPW_ERR_ARG;
-    if (kill(-proc->pid, SIGTERM) != 0 && !proc->exited)
-        kill(proc->pid, SIGTERM);
+    spw_signal_tree(proc, SIGTERM);
     return SPW_OK;
+}
+
+static void spw_time_up(spw_proc_t *proc, long long now)
+{
+    proc->timed_out = 1;
+    if (proc->grace_ms <= 0 || proc->exited) {
+        spw_proc_kill(proc);
+        return;
+    }
+    spw_signal_tree(proc, SIGTERM);
+    proc->kill_at = now + proc->grace_ms;
 }
 
 static int spw_wait_result(const spw_proc_t *proc)
@@ -746,7 +781,10 @@ int spw_proc_wait(spw_proc_t *proc, long timeout_ms)
         if (spw_done(proc))
             return spw_wait_result(proc);
         if (proc->deadline > 0 && !proc->timed_out && now >= proc->deadline) {
-            proc->timed_out = 1;
+            spw_time_up(proc, now);
+            continue;
+        }
+        if (proc->kill_at > 0 && now >= proc->kill_at) {
             spw_proc_kill(proc);
             continue;
         }

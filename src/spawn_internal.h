@@ -38,6 +38,8 @@ struct spw_cmd {
     unsigned char *input;
     size_t input_len;
     long timeout_ms;
+    long grace_ms;
+    int same_group;
     size_t output_limit;
     spw_output_fn output_fn;
     void *output_ctx;
