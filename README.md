@@ -102,6 +102,13 @@ Conventions:
   closed once everything is written. A stdin pipe without input gives the child an
   immediate end of file. A later `spw_cmd_stdio` call on stdin drops the input
 - `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
+- `spw_cmd_kill_grace` makes the time limit ask first: the tree gets `SIGTERM`, and `SIGKILL`
+  only if it still runs `grace_ms` later. Windows kills at once
+- `spw_cmd_same_group(cmd, 1)` keeps the child in the caller's process group, which an
+  interactive program needs to read the terminal (an editor, a pager, a password prompt):
+  in its own group it would be stopped by `SIGTTIN`. The price is that kill, terminate and
+  the time limit then reach only the child, not its descendants. No effect on Windows, where
+  the job object still holds the tree
 - `spw_cmd_output_limit` caps the bytes kept per captured stream; `0` (default) means no cap.
   The child is never blocked: bytes past the cap are read and thrown away
 - `spw_cmd_output_fn` hands each captured chunk to a callback, from inside `spw_proc_wait`,
