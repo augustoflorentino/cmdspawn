@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "Please cite cmdspawn using these metadata."
+type: software
+title: cmdspawn
+abstract: "Run programs from C without a shell: capture output, time limits, process trees, on POSIX and Windows"
+authors:
+  - family-names: Florentino
+    given-names: Augusto
+license: MIT
+repository-code: "https://github.com/augustoflorentino/cmdspawn"
+keywords:
+  - c
+  - c99
+  - library
+  - process
+  - subprocess
+  - posix-spawn
+  - windows
+  - cross-platform
