@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cmdspawn VERSION 1.0.0 DESCRIPTION "Run programs portably on POSIX and Windows: no shell, captured output, time limits" LANGUAGES C)
+project(cmdspawn VERSION 1.4.0 DESCRIPTION "Run programs portably on POSIX and Windows: no shell, captured output, time limits" LANGUAGES C)
 
 option(CMDSPAWN_BUILD_TESTS "Build tests" OFF)
 option(CMDSPAWN_BUILD_EXAMPLES "Build examples" OFF)

@@ -4,6 +4,16 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 1.4.0 - 2025-10-06
+
+New functions; no change needed in existing code.
+
+- `spw_cmd_same_group`: run the child in the caller's process group, so interactive programs
+  that read the terminal work; before, every child got its own group and was stopped by
+  `SIGTTIN` on its first terminal read
+- `spw_cmd_kill_grace`: when the time limit passes, send `SIGTERM` and wait `grace_ms` before
+  `SIGKILL`, like `timeout -k`
+
 ## 1.0.0 - 2025-09-21
 
 The interface is stable from here on: incompatible changes only in a new major version, with
