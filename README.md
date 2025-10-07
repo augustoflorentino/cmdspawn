@@ -16,6 +16,8 @@ time limits.
 - non-blocking use: wait with a time limit of 0 and hand the pipe and process handles to your
   own event loop
 
+<p align="center"><img src="docs/images/timeline.svg" alt="examples/poll_loop.c running a child that prints three lines: the parent waits in 100 ms slices and sees the bytes arrive through the stdout pipe" width="820"></p>
+
 ## Build and install
 
 ```sh
