@@ -48,6 +48,7 @@ struct spw_proc {
     int exit_code;
     int signal;
     int timed_out;
+    int stopped;
     int own_group;
     long grace_ms;
     long long deadline;
@@ -697,7 +698,7 @@ static int spw_done(spw_proc_t *proc)
     if (!proc->exited)
         return 0;
     spw_close(&proc->fds[SPW_STDIN]);
-    if (!proc->timed_out)
+    if (!proc->timed_out && !proc->stopped)
         return proc->fds[SPW_STDOUT] < 0 && proc->fds[SPW_STDERR] < 0;
     for (s = SPW_STDOUT; s <= SPW_STDERR; s++)
         if (proc->fds[s] >= 0 && spw_drain(proc, s) == SPW_OK)
@@ -764,6 +765,8 @@ static void spw_time_up(spw_proc_t *proc, long long now)
 
 static int spw_wait_result(const spw_proc_t *proc)
 {
+    if (proc->stopped)
+        return SPW_ERR_STOPPED;
     return proc->timed_out ? SPW_ERR_TIMEOUT : SPW_OK;
 }
 
@@ -794,6 +797,10 @@ int spw_proc_wait(spw_proc_t *proc, long timeout_ms)
         status = spw_poll_once(proc, spw_wait_ms(proc, now, limit));
         if (status != SPW_OK)
             return status;
+        if (!proc->stopped && (proc->out[0].stopped || proc->out[1].stopped)) {
+            proc->stopped = 1;
+            spw_proc_kill(proc);
+        }
         now = spw_now_ms();
     }
 }

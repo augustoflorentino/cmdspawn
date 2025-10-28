@@ -32,6 +32,7 @@ extern "C" {
 #define SPW_ERR_ENCODING 8
 #define SPW_ERR_RANGE 9
 #define SPW_ERR_UNSUPPORTED 10
+#define SPW_ERR_STOPPED 11
 
 #define SPW_STDIN 0
 #define SPW_STDOUT 1
@@ -56,7 +57,7 @@ typedef struct spw_proc spw_proc_t;
 
 typedef void *(*spw_alloc_fn)(void *ctx, size_t size);
 typedef void (*spw_free_fn)(void *ctx, void *ptr);
-typedef void (*spw_output_fn)(void *ctx, int stream, const unsigned char *data, size_t data_len);
+typedef int (*spw_output_fn)(void *ctx, int stream, const unsigned char *data, size_t data_len);
 
 SPW_API int spw_cmd_create(spw_alloc_fn alloc_fn, spw_free_fn free_fn, void *alloc_ctx, spw_cmd_t **out_cmd);
 SPW_API void spw_cmd_destroy(spw_cmd_t *cmd);

@@ -437,17 +437,51 @@ typedef struct {
     int bad;
 } stream_count_t;
 
-static void count_output(void *ctx, int stream, const unsigned char *data, size_t data_len)
+static int count_output(void *ctx, int stream, const unsigned char *data, size_t data_len)
 {
     stream_count_t *count = ctx;
 
     if (stream != SPW_STDOUT && stream != SPW_STDERR) {
         count->bad = 1;
-        return;
+        return 0;
     }
     if (data_len == 0 || data[0] != (stream == SPW_STDOUT ? 'o' : 'e'))
         count->bad = 1;
     count->bytes[stream] += data_len;
+    return 0;
+}
+
+static int stop_after_first(void *ctx, int stream, const unsigned char *data, size_t data_len)
+{
+    stream_count_t *count = ctx;
+
+    (void)data;
+    count->bytes[stream] += data_len;
+    return 1;
+}
+
+static void test_output_fn_stop(void)
+{
+    spw_cmd_t *cmd = helper_cmd("flood", "100000000");
+    spw_proc_t *proc;
+    stream_count_t count = {{0, 0, 0}, 0};
+    int code = 0;
+    int sig = 0;
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDERR, SPW_NULL) == SPW_OK);
+    CHECK(spw_cmd_output_fn(cmd, stop_after_first, &count) == SPW_OK);
+    proc = run_cmd(cmd, SPW_ERR_STOPPED);
+    CHECK(count.bytes[SPW_STDOUT] > 0 && count.bytes[SPW_STDOUT] < 100000000);
+    CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
+#if defined(_WIN32)
+    CHECK(code == 1);
+#else
+    CHECK(code == -1 && sig == SIGKILL);
+#endif
+    CHECK(spw_proc_wait(proc, 0) == SPW_ERR_STOPPED);
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
 }
 
 static void test_output_fn(void)
@@ -902,6 +936,7 @@ static void test_bad_args(void)
     spw_proc_destroy(NULL);
     CHECK(strcmp(spw_strerror(SPW_ERR_TIMEOUT), spw_strerror(-1)) != 0);
     CHECK(spw_strerror(-1) != NULL);
+    CHECK(strcmp(spw_strerror(SPW_ERR_STOPPED), spw_strerror(-1)) != 0);
 }
 
 static int run_with_failure(failing_alloc_t *fa)
@@ -997,6 +1032,7 @@ int main(int argc, char **argv)
     test_flood();
     test_output_limit();
     test_output_fn();
+    test_output_fn_stop();
 #if !defined(_WIN32)
     test_terminate();
     test_same_group();

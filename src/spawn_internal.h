@@ -54,6 +54,7 @@ struct spw_out {
     spw_output_fn fn;
     void *fn_ctx;
     int stream;
+    int stopped;
 };
 
 void *spw_mem_alloc(const struct spw_mem *mem, size_t size);

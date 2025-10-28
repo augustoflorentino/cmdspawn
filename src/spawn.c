@@ -81,8 +81,12 @@ int spw_out_put(const struct spw_mem *mem, struct spw_out *out, const unsigned c
     size_t room = data_len;
     int status;
 
+    if (out->stopped) {
+        out->dropped += data_len;
+        return SPW_OK;
+    }
     if (out->fn != NULL) {
-        out->fn(out->fn_ctx, out->stream, data, data_len);
+        out->stopped = out->fn(out->fn_ctx, out->stream, data, data_len) != 0;
         return SPW_OK;
     }
     if (out->limit > 0)
@@ -536,6 +540,8 @@ const char *spw_strerror(int status)
         return "buffer too small";
     case SPW_ERR_UNSUPPORTED:
         return "not supported on this system";
+    case SPW_ERR_STOPPED:
+        return "stopped by the output callback, process tree killed";
     default:
         return "unknown status";
     }

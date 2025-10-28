@@ -30,6 +30,7 @@ struct spw_proc {
     int exited;
     int exit_code;
     int timed_out;
+    int stopped;
     ULONGLONG deadline;
 };
 
@@ -656,7 +657,7 @@ static int spw_done(spw_proc_t *proc)
     if (!proc->exited)
         return 0;
     spw_pipe_close(&proc->pipes[SPW_STDIN]);
-    if (proc->timed_out) {
+    if (proc->timed_out || proc->stopped) {
         spw_pipe_complete(proc, SPW_STDOUT);
         spw_pipe_complete(proc, SPW_STDERR);
         spw_pipe_close(&proc->pipes[SPW_STDOUT]);
@@ -726,7 +727,7 @@ int spw_proc_wait(spw_proc_t *proc, long timeout_ms)
     for (;;) {
         spw_check_exit(proc);
         if (spw_done(proc))
-            return proc->timed_out ? SPW_ERR_TIMEOUT : SPW_OK;
+            return proc->stopped ? SPW_ERR_STOPPED : proc->timed_out ? SPW_ERR_TIMEOUT : SPW_OK;
         if (proc->deadline > 0 && !proc->timed_out && now >= proc->deadline) {
             proc->timed_out = 1;
             spw_proc_kill(proc);
@@ -739,6 +740,11 @@ int spw_proc_wait(spw_proc_t *proc, long timeout_ms)
         status = spw_wait_once(proc, spw_wait_ms(proc, now, limit));
         if (status != SPW_OK)
             return status;
+        if (!proc->stopped && (proc->out[0].stopped || proc->out[1].stopped)) {
+            proc->stopped = 1;
+            spw_proc_kill(proc);
+            WaitForSingleObject(proc->process, INFINITE);
+        }
         now = GetTickCount64();
     }
 }
