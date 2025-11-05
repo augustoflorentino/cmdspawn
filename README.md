@@ -115,7 +115,8 @@ Conventions:
   The child is never blocked: bytes past the cap are read and thrown away
 - `spw_cmd_output_fn` hands each captured chunk to a callback, from inside `spw_proc_wait`,
   instead of keeping it: `spw_proc_output` then stays empty and the limit does not apply.
-  `NULL` goes back to keeping the bytes
+  `NULL` goes back to keeping the bytes. The callback returns `0` to go on; any other value
+  kills the tree, later bytes are dropped, and `spw_proc_wait` returns `SPW_ERR_STOPPED`
 
 ### Process
 
