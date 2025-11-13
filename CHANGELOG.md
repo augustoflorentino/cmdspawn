@@ -4,6 +4,23 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 2.0.0 - 2025-11-12
+
+Incompatible change: the output callback type.
+
+- `spw_output_fn` returns `int`: `0` goes on, anything else kills the process tree and makes
+  `spw_proc_wait` return the new `SPW_ERR_STOPPED`. Before, a callback could only watch: it
+  had no way to stop a child whose output it no longer wanted (first error found, runaway
+  output), since it receives neither the process nor a way to signal back
+- soname `libcmdspawn.so.2`
+
+### Upgrading
+
+- change each output callback to return `int` and add `return 0;` to keep the old behavior
+- a `switch` on `spw_proc_wait` results may want a case for `SPW_ERR_STOPPED`; it is only
+  returned when a callback asks to stop
+- rebuild; programs linked to `libcmdspawn.so.1` keep using the old library
+
 ## 1.4.0 - 2025-10-06
 
 New functions; no change needed in existing code.
