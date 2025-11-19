@@ -81,6 +81,7 @@ SPW_API int spw_proc_wait(spw_proc_t *proc, long timeout_ms);
 SPW_API int spw_proc_kill(spw_proc_t *proc);
 SPW_API int spw_proc_terminate(spw_proc_t *proc);
 SPW_API int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal);
+SPW_API int spw_proc_killed(const spw_proc_t *proc);
 SPW_API long spw_proc_pid(const spw_proc_t *proc);
 SPW_API spw_handle_t spw_proc_handle(const spw_proc_t *proc, int which);
 SPW_API const unsigned char *spw_proc_output(const spw_proc_t *proc, int stream, size_t *out_len);

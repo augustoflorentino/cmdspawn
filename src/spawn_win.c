@@ -31,6 +31,7 @@ struct spw_proc {
     int exit_code;
     int timed_out;
     int stopped;
+    int killed;
     ULONGLONG deadline;
 };
 
@@ -701,6 +702,9 @@ int spw_proc_kill(spw_proc_t *proc)
 {
     if (proc == NULL)
         return SPW_ERR_ARG;
+    spw_check_exit(proc);
+    if (!proc->exited)
+        proc->killed = 1;
     if (proc->job != NULL)
         TerminateJobObject(proc->job, 1);
     if (!proc->exited)
@@ -782,6 +786,11 @@ int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal)
     if (out_signal != NULL)
         *out_signal = 0;
     return SPW_OK;
+}
+
+int spw_proc_killed(const spw_proc_t *proc)
+{
+    return proc != NULL && proc->killed;
 }
 
 long spw_proc_pid(const spw_proc_t *proc)

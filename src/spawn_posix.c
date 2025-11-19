@@ -49,6 +49,8 @@ struct spw_proc {
     int signal;
     int timed_out;
     int stopped;
+    int reaped;
+    int killed;
     int own_group;
     long grace_ms;
     long long deadline;
@@ -562,25 +564,28 @@ int spw_spawn_detached(const spw_cmd_t *cmd, long *out_pid)
 
 static void spw_check_exit(spw_proc_t *proc)
 {
-    int wstatus;
-    pid_t r;
+    siginfo_t info;
+    int r;
 
     if (proc->exited)
         return;
+    memset(&info, 0, sizeof(info));
     do
-        r = waitpid(proc->pid, &wstatus, WNOHANG);
+        r = waitid(P_PID, (id_t)proc->pid, &info, WEXITED | WNOHANG | WNOWAIT);
     while (r < 0 && errno == EINTR);
-    if (r == 0)
+    if (r == 0 && info.si_pid == 0)
         return;
     proc->exited = 1;
     proc->exit_code = -1;
-    if (r < 0)
-        return;
-    if (WIFEXITED(wstatus))
-        proc->exit_code = WEXITSTATUS(wstatus);
-    else if (WIFSIGNALED(wstatus))
-        proc->signal = WTERMSIG(wstatus);
     spw_close(&proc->pidfd);
+    if (r < 0) {
+        proc->reaped = 1;
+        return;
+    }
+    if (info.si_code == CLD_EXITED)
+        proc->exit_code = info.si_status;
+    else
+        proc->signal = info.si_status;
 }
 
 static int spw_drain(spw_proc_t *proc, int stream)
@@ -739,6 +744,9 @@ int spw_proc_kill(spw_proc_t *proc)
 {
     if (proc == NULL)
         return SPW_ERR_ARG;
+    spw_check_exit(proc);
+    if (!proc->exited)
+        proc->killed = 1;
     spw_signal_tree(proc, SIGKILL);
     proc->kill_at = 0;
     return SPW_OK;
@@ -811,10 +819,10 @@ void spw_proc_destroy(spw_proc_t *proc)
 
     if (proc == NULL)
         return;
-    if (proc->pid > 0 && !proc->exited) {
+    if (proc->pid > 0 && !proc->exited)
         spw_proc_kill(proc);
+    if (proc->pid > 0 && !proc->reaped)
         spw_reap(proc->pid);
-    }
     for (i = 0; i < 3; i++)
         spw_close(&proc->fds[i]);
     spw_close(&proc->pidfd);
@@ -835,6 +843,11 @@ int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal)
     if (out_signal != NULL)
         *out_signal = proc->signal;
     return SPW_OK;
+}
+
+int spw_proc_killed(const spw_proc_t *proc)
+{
+    return proc != NULL && proc->killed;
 }
 
 long spw_proc_pid(const spw_proc_t *proc)

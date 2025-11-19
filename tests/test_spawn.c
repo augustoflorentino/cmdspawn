@@ -331,9 +331,30 @@ static void test_exit_code(void)
     CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
     CHECK(code == 7 && sig == 0);
     CHECK(spw_proc_pid(proc) > 0);
+    CHECK(!spw_proc_killed(proc));
+    CHECK(spw_proc_kill(proc) == SPW_OK);
+    CHECK(!spw_proc_killed(proc));
+    CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
+    CHECK(code == 7 && sig == 0);
     spw_proc_destroy(proc);
     spw_cmd_destroy(cmd);
 }
+
+#if !defined(_WIN32)
+static void test_leader_held(void)
+{
+    spw_cmd_t *cmd = helper_cmd("exit", "3");
+    spw_proc_t *proc = run_cmd(cmd, SPW_OK);
+    pid_t pid = (pid_t)spw_proc_pid(proc);
+
+    CHECK(kill(pid, 0) == 0);
+    CHECK(spw_proc_kill(proc) == SPW_OK);
+    CHECK(spw_proc_wait(proc, 0) == SPW_OK);
+    spw_proc_destroy(proc);
+    CHECK(waitpid(pid, NULL, WNOHANG) < 0 && errno == ECHILD);
+    spw_cmd_destroy(cmd);
+}
+#endif
 
 #if !defined(_WIN32)
 static void test_signal(void)
@@ -480,6 +501,7 @@ static void test_output_fn_stop(void)
     CHECK(code == -1 && sig == SIGKILL);
 #endif
     CHECK(spw_proc_wait(proc, 0) == SPW_ERR_STOPPED);
+    CHECK(spw_proc_killed(proc));
     spw_proc_destroy(proc);
     spw_cmd_destroy(cmd);
 }
@@ -755,6 +777,7 @@ static void test_poll_and_kill(void)
     CHECK(spw_proc_terminate(proc) == SPW_ERR_UNSUPPORTED);
 #endif
     CHECK(spw_proc_kill(proc) == SPW_OK);
+    CHECK(spw_proc_killed(proc));
     CHECK(spw_proc_wait(proc, -1) == SPW_OK);
     CHECK(spw_proc_status(proc, &code, &sig) == SPW_OK);
 #if defined(_WIN32)
@@ -917,6 +940,7 @@ static void test_bad_args(void)
     CHECK(spw_cmd_same_group(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_cmd_kill_grace(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
+    CHECK(!spw_proc_killed(NULL));
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn_detached(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_wait(NULL, 0) == SPW_ERR_ARG);
@@ -1024,6 +1048,9 @@ int main(int argc, char **argv)
 #endif
     test_argv_round_trip();
     test_exit_code();
+#if !defined(_WIN32)
+    test_leader_held();
+#endif
 #if !defined(_WIN32)
     test_signal();
 #endif
