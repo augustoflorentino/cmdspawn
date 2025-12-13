@@ -135,7 +135,12 @@ Conventions:
 - `spw_proc_output` returns the bytes captured so far; the pointer is valid until the next
   `spw_proc_wait` or `spw_proc_destroy`; `spw_proc_dropped` counts the bytes thrown away
   past the output limit
-- `spw_proc_destroy` on a running process kills its tree and collects it first
+- `spw_proc_killed` tells whether the process was killed by `spw_proc_kill`, the time limit
+  or a stopping callback, rather than ending on its own; on Windows a kill and `exit(1)` give
+  the same exit code, so this is the only way to tell them apart
+- `spw_proc_destroy` on a running process kills its tree and collects it first. On POSIX the
+  ended process stays a zombie until `spw_proc_destroy`: its pid, and so its process group,
+  cannot be reused, which keeps kill and the time limit from reaching an unrelated group
 - `spw_proc_handle` gives what an event loop waits on, then call `spw_proc_wait(proc, 0)`:
   - POSIX: the pipe file descriptors for `SPW_STDIN`, `SPW_STDOUT` and `SPW_STDERR`, and for
     `SPW_PROCESS` a pidfd on Linux 5.3 or later (`-1` elsewhere: use `spw_proc_pid` with
