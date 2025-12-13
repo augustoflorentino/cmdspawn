@@ -4,6 +4,17 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 2.2.0 - 2025-12-12
+
+New function and a fix; no change needed in existing code.
+
+- POSIX: the ended process is collected only by `spw_proc_destroy`, so its pid stays
+  reserved. Before, once collected, a later kill of the tree (by `spw_proc_kill` or the time
+  limit, aimed at descendants still holding the pipes) could reach a new, unrelated process
+  group that got the same number
+- `spw_proc_killed`: whether the process was killed rather than exiting on its own; needed on
+  Windows, where a kill and `exit(1)` look the same
+
 ## 2.0.0 - 2025-11-12
 
 Incompatible change: the output callback type.
