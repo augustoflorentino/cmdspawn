@@ -33,6 +33,8 @@ extern "C" {
 #define SPW_ERR_RANGE 9
 #define SPW_ERR_UNSUPPORTED 10
 #define SPW_ERR_STOPPED 11
+#define SPW_ERR_ACCESS 12
+#define SPW_ERR_FORMAT 13
 
 #define SPW_STDIN 0
 #define SPW_STDOUT 1

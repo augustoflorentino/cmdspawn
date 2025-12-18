@@ -331,6 +331,10 @@ static int spw_errno_status(int err)
         return SPW_ERR_NOTFOUND;
     if (err == ENOMEM)
         return SPW_ERR_NOMEM;
+    if (err == EACCES || err == EPERM)
+        return SPW_ERR_ACCESS;
+    if (err == ENOEXEC)
+        return SPW_ERR_FORMAT;
     return SPW_ERR_SPAWN;
 }
 

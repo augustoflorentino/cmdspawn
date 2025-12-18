@@ -18,6 +18,7 @@
 #else
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -861,6 +862,56 @@ static void test_not_found(void)
     spw_cmd_destroy(cmd);
 }
 
+static void write_file(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "wb");
+
+    CHECK(f != NULL);
+    if (f == NULL)
+        return;
+    fputs(text, f);
+    fclose(f);
+}
+
+static int spawn_status(const char *path)
+{
+    const char *args[1];
+    spw_cmd_t *cmd = NULL;
+    spw_proc_t *proc = NULL;
+    int status;
+
+    args[0] = path;
+    CHECK(spw_cmd_create(NULL, NULL, NULL, &cmd) == SPW_OK);
+    CHECK(spw_cmd_args(cmd, args, 1) == SPW_OK);
+    status = spw_spawn(cmd, &proc);
+    CHECK(status != SPW_OK || proc != NULL);
+    spw_proc_destroy(proc);
+    if (status != SPW_OK)
+        CHECK(spw_spawn_detached(cmd, NULL) == status);
+    spw_cmd_destroy(cmd);
+    return status;
+}
+
+static void test_spawn_errors(void)
+{
+#if defined(_WIN32)
+    write_file("spw_badfmt.exe", "not a program\n");
+    CHECK(spawn_status(".\\spw_badfmt.exe") == SPW_ERR_FORMAT);
+    remove("spw_badfmt.exe");
+#else
+    write_file("spw_noexec", "#!/bin/sh\nexit 0\n");
+    chmod("spw_noexec", 0644);
+    write_file("spw_badfmt", "\001\002 not a program\n");
+    chmod("spw_badfmt", 0755);
+    CHECK(spawn_status("./spw_noexec") == SPW_ERR_ACCESS);
+    CHECK(spawn_status("./spw_badfmt") == SPW_ERR_FORMAT);
+    remove("spw_noexec");
+    remove("spw_badfmt");
+#endif
+    CHECK(strcmp(spw_strerror(SPW_ERR_ACCESS), spw_strerror(-1)) != 0);
+    CHECK(strcmp(spw_strerror(SPW_ERR_FORMAT), spw_strerror(-1)) != 0);
+}
+
 static void test_path_search(void)
 {
 #if defined(_WIN32)
@@ -1074,6 +1125,7 @@ int main(int argc, char **argv)
     test_relative_path_and_cwd();
 #endif
     test_not_found();
+    test_spawn_errors();
     test_poll_and_kill();
     test_destroy_running();
     test_timeout_kills_tree();

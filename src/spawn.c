@@ -540,6 +540,10 @@ const char *spw_strerror(int status)
         return "buffer too small";
     case SPW_ERR_UNSUPPORTED:
         return "not supported on this system";
+    case SPW_ERR_ACCESS:
+        return "permission denied";
+    case SPW_ERR_FORMAT:
+        return "not an executable this system can run";
     case SPW_ERR_STOPPED:
         return "stopped by the output callback, process tree killed";
     default:

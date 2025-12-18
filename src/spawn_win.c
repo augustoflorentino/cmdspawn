@@ -467,6 +467,10 @@ static int spw_create_process(struct spw_wprep *prep, DWORD flags, PROCESS_INFOR
     if (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND ||
         GetLastError() == ERROR_DIRECTORY)
         return SPW_ERR_NOTFOUND;
+    if (GetLastError() == ERROR_ACCESS_DENIED)
+        return SPW_ERR_ACCESS;
+    if (GetLastError() == ERROR_BAD_EXE_FORMAT || GetLastError() == ERROR_EXE_MACHINE_TYPE_MISMATCH)
+        return SPW_ERR_FORMAT;
     return SPW_ERR_SPAWN;
 }
 
