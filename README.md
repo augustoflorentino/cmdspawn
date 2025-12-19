@@ -118,6 +118,16 @@ Conventions:
   `NULL` goes back to keeping the bytes. The callback returns `0` to go on; any other value
   kills the tree, later bytes are dropped, and `spw_proc_wait` returns `SPW_ERR_STOPPED`
 
+### Starting
+
+`spw_spawn` and `spw_spawn_detached` tell why a program could not start:
+
+- `SPW_ERR_NOTFOUND`: no such program, in `PATH` or at the given path
+- `SPW_ERR_ACCESS`: the file exists but may not be run (no execute permission, a directory)
+- `SPW_ERR_FORMAT`: the file is not a program this system can run (a script without `#!`, a
+  binary for another machine)
+- `SPW_ERR_SPAWN`: any other system failure (process or descriptor limits)
+
 ### Process
 
 - `spw_proc_wait(proc, timeout_ms)` moves data through the pipes and returns `SPW_OK` once the
