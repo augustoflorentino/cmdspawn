@@ -1,68 +1,24 @@
 # cmdspawn
 
-Run another program the same way on Linux, macOS, BSD and Windows: no shell, captured output,
-time limits.
+Start another program from C without a shell, collect what it prints and put a time limit on it,
+with one API on Linux, macOS, BSD and Windows.
 
-- the command is an argument list, never a shell string; the program is looked up in `PATH`
-- POSIX uses `posix_spawn`; Windows uses `CreateProcessW` with UTF-8 converted to UTF-16
-- Windows command lines are built as the exact inverse of `CommandLineToArgvW` and the
-  Microsoft C runtime rules, so every argument arrives unchanged (`spw_win_quote`)
-- environment changes and working directory per command
-- stdout and stderr captured separately or merged, stdin fed from memory, without deadlock on
-  large output
-- time limit that kills the whole process tree (process group on POSIX, job object on Windows)
-- exit code or signal
-- detached launch: fire and forget, no zombie
-- non-blocking use: wait with a time limit of 0 and hand the pipe and process handles to your
-  own event loop
+## Quick start
 
-<p align="center"><img src="docs/images/timeline.svg" alt="examples/poll_loop.c running a child that prints three lines: the parent waits in 100 ms slices and sees the bytes arrive through the stdout pipe" width="820"></p>
-
-## Build and install
-
-```sh
-cmake -S . -B build -DBUILD_SHARED_LIBS=ON
-cmake --build build
-cmake --install build --prefix /usr/local
-```
-
-Use it from CMake:
-
-```cmake
-find_package(cmdspawn REQUIRED)
-target_link_libraries(app PRIVATE cmdspawn::cmdspawn)
-```
-
-Or with pkg-config:
-
-```sh
-cc app.c $(pkg-config --cflags --libs cmdspawn)
-```
-
-## Single-file form
-
-`scripts/amalgamate.sh` writes `dist/cmdspawn/cmdspawn.h`. The folder keeps it from hiding the
-system `<spawn.h>`. Copy the `cmdspawn` folder into a directory on your include path and, in
-exactly one `.c` file, before any other include:
+[`examples/basic.c`](examples/basic.c) runs a command, waits for it and prints its output. With
+no arguments it runs itself as the child:
 
 ```c
-#define SPW_IMPLEMENTATION
-#include "cmdspawn/cmdspawn.h"
-```
-
-Define `SPW_STATIC` as well to keep every function private to that file.
-
-## Usage
-
-```c
-const char *args[] = {"git", "rev-parse", "HEAD"};
 spw_cmd_t *cmd = NULL;
 spw_proc_t *proc = NULL;
+const unsigned char *out;
+size_t out_len = 0;
+int code = 0;
 int status;
 
 status = spw_cmd_create(NULL, NULL, NULL, &cmd);
 if (status == SPW_OK)
-    status = spw_cmd_args(cmd, args, 3);
+    status = spw_cmd_args(cmd, args, args_len);
 if (status == SPW_OK)
     status = spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE);
 if (status == SPW_OK)
@@ -71,131 +27,173 @@ if (status == SPW_OK)
     status = spw_spawn(cmd, &proc);
 if (status == SPW_OK)
     status = spw_proc_wait(proc, -1);
+if (status == SPW_OK)
+    status = spw_proc_status(proc, &code, NULL);
+if (status == SPW_OK) {
+    out = spw_proc_output(proc, SPW_STDOUT, &out_len);
+    printf("exit code %d, output: %.*s", code, (int)out_len, (const char *)out);
+}
+spw_proc_destroy(proc);
+spw_cmd_destroy(cmd);
 ```
 
-Then `spw_proc_status` gives the exit code and `spw_proc_output` the captured bytes. See
-[`examples/`](examples): `basic.c` (run and capture), `hook.c` (detached launch) and
-`poll_loop.c` (non-blocking wait).
+```console
+$ ./cmdspawn_basic
+exit code 0, output: hello from the child
+$ ./cmdspawn_basic uname -s
+exit code 0, output: Linux
+```
 
-Conventions:
+| | Starts with | Kills the tree through | Handle for an event loop |
+| --- | --- | --- | --- |
+| Linux | `posix_spawn` | process group | pipes, and a pidfd on 5.3 or later |
+| macOS, BSD | `posix_spawn` | process group | pipes; `spw_proc_pid` for kqueue |
+| Windows | `CreateProcessW`, UTF-8 turned into UTF-16 | job object | overlapped pipe events and the process handle |
 
-- every function that can fail returns `SPW_OK` or an error code; `spw_strerror` describes it
-- what `spw_cmd_create` and `spw_spawn` return is released only by `spw_cmd_destroy` and
-  `spw_proc_destroy`, which accept `NULL`
-- functions never take ownership of their arguments and copy what they keep; the command can
-  be changed, reused or destroyed after `spw_spawn`
-- pass your own allocator to `spw_cmd_create`, or `NULL` for `malloc`/`free`; processes use
-  the allocator of the command that started them
-- all text is UTF-8
+## Why
 
-### Command
+`system()` and `popen()` hand a string to a shell, so every argument has to survive quoting,
+and they give back either the exit code or one stream, never both, with no way to stop a child
+that hangs. Doing it properly means `posix_spawn` and file actions on one side and
+`CreateProcessW`, job objects and overlapped pipes on the other, plus the Windows command line,
+which each program splits again by its own rules. cmdspawn wraps all of that: the command is an
+argument list, output is read without deadlocking on large amounts, and a time limit takes down
+the child and everything it started.
 
-- `spw_cmd_args` appends arguments; the first one is the program. A name without a path
-  separator is looked up in the `PATH` of the child environment (falling back to `/usr/bin:/bin`
-  on POSIX; on Windows the system directory is tried after `PATH`, `.exe` is added when the
-  name has no extension, and the current directory is never searched). A relative path is
-  relative to the child working directory
+## API tour
+
+Every call that can fail returns `SPW_OK` or an error code, and `spw_strerror` describes it.
+`spw_cmd_create` and `spw_spawn` hand out objects that only `spw_cmd_destroy` and
+`spw_proc_destroy` release; both accept `NULL`. Nothing takes ownership of its arguments, so a
+command can be changed, reused or destroyed after `spw_spawn`. An allocator passed to
+`spw_cmd_create` replaces `malloc` and `free` for the command and the processes it starts. All
+text is UTF-8.
+
+### Describing the command
+
+- `spw_cmd_args` appends arguments, the program first. A bare name is looked up in the `PATH`
+  of the child's environment (`/usr/bin:/bin` when there is none on POSIX). On Windows the
+  system directory comes after `PATH`, `.exe` is added to a name without extension, and the
+  current directory is never searched. A relative path counts from the child's working
+  directory.
 - `spw_cmd_env` sets a variable, or removes it when `value` is `NULL`; `spw_cmd_env_clear`
-  starts from an empty environment instead of the parent one. Names are case-insensitive on
-  Windows
-- `spw_cmd_stdio` picks, per stream, `SPW_INHERIT` (default), `SPW_NULL`, `SPW_PIPE` (capture,
-  or feed for stdin) or, for stderr only, `SPW_MERGE` (same destination as stdout)
-- `spw_cmd_input` copies the bytes to feed on stdin and switches stdin to `SPW_PIPE`; stdin is
-  closed once everything is written. A stdin pipe without input gives the child an
-  immediate end of file. A later `spw_cmd_stdio` call on stdin drops the input
-- `spw_cmd_input_open(cmd, 1)` keeps a stdin pipe open after the initial input, for a
-  conversation with the child (a REPL, a line protocol): `spw_proc_write` queues more bytes,
-  written as the pipe accepts them, also during `spw_proc_wait`, and `spw_proc_close_input`
-  ends stdin once the queue is written. `spw_proc_write` returns `SPW_ERR_IO` once stdin is
-  closed, by the caller or because the child stopped reading
-- `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
-- `spw_cmd_kill_grace` makes the time limit ask first: the tree gets `SIGTERM`, and `SIGKILL`
-  only if it still runs `grace_ms` later. Windows kills at once
-- `spw_cmd_same_group(cmd, 1)` keeps the child in the caller's process group, which an
-  interactive program needs to read the terminal (an editor, a pager, a password prompt):
-  in its own group it would be stopped by `SIGTTIN`. The price is that kill, terminate and
-  the time limit then reach only the child, not its descendants. No effect on Windows, where
-  the job object still holds the tree
-- `spw_cmd_output_limit` caps the bytes kept per captured stream; `0` (default) means no cap.
-  The child is never blocked: bytes past the cap are read and thrown away
-- `spw_cmd_output_fn` hands each captured chunk to a callback, from inside `spw_proc_wait`,
-  instead of keeping it: `spw_proc_output` then stays empty and the limit does not apply.
-  `NULL` goes back to keeping the bytes. The callback returns `0` to go on; any other value
-  kills the tree, later bytes are dropped, and `spw_proc_wait` returns `SPW_ERR_STOPPED`
+  starts from an empty environment. Names are case-insensitive on Windows.
+- `spw_cmd_stdio` chooses per stream between `SPW_INHERIT` (the default), `SPW_NULL`,
+  `SPW_PIPE` and, for stderr, `SPW_MERGE` into stdout.
+- `spw_cmd_input` copies bytes to feed on stdin, which closes once they are written; a stdin
+  pipe without input is an immediate end of file. A later `spw_cmd_stdio` on stdin drops them.
+- `spw_cmd_input_open(cmd, 1)` keeps stdin open for a conversation with the child:
+  `spw_proc_write` queues more bytes, written as the pipe accepts them, and
+  `spw_proc_close_input` ends stdin once the queue is empty. After stdin closes, by the caller
+  or because the child stopped reading, `spw_proc_write` returns `SPW_ERR_IO`.
+- `spw_cmd_timeout` limits the run in milliseconds from `spw_spawn` (`0` is no limit), and
+  `spw_cmd_kill_grace` sends `SIGTERM` first and `SIGKILL` only `grace_ms` later. Windows kills
+  at once.
+- `spw_cmd_same_group(cmd, 1)` keeps the child in the caller's process group, which an editor,
+  a pager or a password prompt needs to read the terminal. Kills then reach only the child, not
+  its descendants. On Windows the job object still holds the tree.
+- `spw_cmd_output_limit` caps the bytes kept per stream; the child is never blocked, and bytes
+  past the cap are read and dropped. `spw_cmd_output_fn` passes each chunk to a callback
+  instead of keeping it; a non-zero return kills the tree and `spw_proc_wait` returns
+  `SPW_ERR_STOPPED`.
 
-### Starting
+### Starting it
 
-`spw_spawn` and `spw_spawn_detached` tell why a program could not start:
+`spw_spawn` says why a program did not start: `SPW_ERR_NOTFOUND` (not in `PATH` or not at the
+path), `SPW_ERR_ACCESS` (no execute permission, a directory), `SPW_ERR_FORMAT` (a script without
+`#!`, a binary for another machine) or `SPW_ERR_SPAWN` (process or descriptor limits).
 
-- `SPW_ERR_NOTFOUND`: no such program, in `PATH` or at the given path
-- `SPW_ERR_ACCESS`: the file exists but may not be run (no execute permission, a directory)
-- `SPW_ERR_FORMAT`: the file is not a program this system can run (a script without `#!`, a
-  binary for another machine)
-- `SPW_ERR_SPAWN`: any other system failure (process or descriptor limits)
+`spw_spawn_detached(cmd, &pid)` starts a program and forgets it, filling `pid` if asked. On POSIX
+it runs in a new session through an intermediate process that exits at once, so there is no
+zombie; on Windows it stays out of any job and gets its own process group. Only inherited or
+`SPW_NULL` streams are allowed.
 
-### Process
+### Waiting and polling
 
-- `spw_proc_wait(proc, timeout_ms)` moves data through the pipes and returns `SPW_OK` once the
-  process has exited and its output pipes are closed. `timeout_ms` of `-1` waits as long as
-  needed, `0` only does what is ready, and `SPW_ERR_AGAIN` means the process is still running.
-  When the command time limit passes, the whole tree is killed and `SPW_ERR_TIMEOUT` is
-  returned from then on
-- `spw_proc_kill` kills the whole tree now; `spw_proc_wait` then collects it
-- `spw_proc_terminate` asks the whole tree to stop (`SIGTERM`), so it can clean up; follow
-  with `spw_proc_kill` if it does not. Windows has no such request for a console-less child:
-  `SPW_ERR_UNSUPPORTED`
-- `spw_proc_status` gives the exit code and the signal (POSIX) that ended the process;
-  `SPW_ERR_AGAIN` while it runs. A signal gives exit code `-1`; a killed Windows process exits
-  with code `1`
-- `spw_proc_output` returns the bytes captured so far; the pointer is valid until the next
-  `spw_proc_wait` or `spw_proc_destroy`; `spw_proc_dropped` counts the bytes thrown away
-  past the output limit
-- `spw_proc_killed` tells whether the process was killed by `spw_proc_kill`, the time limit
-  or a stopping callback, rather than ending on its own; on Windows a kill and `exit(1)` give
-  the same exit code, so this is the only way to tell them apart
-- `spw_proc_destroy` on a running process kills its tree and collects it first. On POSIX the
-  ended process stays a zombie until `spw_proc_destroy`: its pid, and so its process group,
-  cannot be reused, which keeps kill and the time limit from reaching an unrelated group
-- `spw_proc_handle` gives what an event loop waits on, then call `spw_proc_wait(proc, 0)`:
-  - POSIX: the pipe file descriptors for `SPW_STDIN`, `SPW_STDOUT` and `SPW_STDERR`, and for
-    `SPW_PROCESS` a pidfd on Linux 5.3 or later (`-1` elsewhere: use `spw_proc_pid` with
-    kqueue, or wait with a small time limit)
-  - Windows: an event signaled when the pipe operation completes, and the process handle
-  - `SPW_NO_HANDLE` once the stream is closed
+`spw_proc_wait(proc, timeout_ms)` moves data through the pipes and returns `SPW_OK` once the
+process has exited and its output pipes are closed. `-1` waits as long as it takes, `0` does
+only what is ready, and `SPW_ERR_AGAIN` means it is still running. Past the time limit the tree
+is killed and the call returns `SPW_ERR_TIMEOUT` from then on.
 
-### Detached
+![examples/poll_loop.c running a child that prints three lines: the parent waits in 100 ms slices and sees the bytes arrive through the stdout pipe](docs/images/timeline.svg)
 
-`spw_spawn_detached(cmd, &pid)` starts the program and forgets it; `pid` (or `NULL`) receives
-the program's process id, to write a pid file or stop it later. On POSIX it runs in a new session,
-through an intermediate process that exits at once, so no zombie is left; on Windows it is
-not put in a job and gets its own process group. Pipes are not allowed;
-inherit or `SPW_NULL` only.
+That is [`examples/poll_loop.c`](examples/poll_loop.c) on Linux, waiting in 100 ms slices on a
+child that prints a line every 250 ms. It printed `tick 0`, `tick 2` and `tick 5`, each with 7
+new bytes, and the eighth wait returned `SPW_OK` as the child exited, about 760 ms in. To wait inside your own event loop
+instead, `spw_proc_handle` gives the pipe descriptors (POSIX), a pidfd for `SPW_PROCESS` on
+Linux 5.3 or later, or the events and process handle on Windows, and `SPW_NO_HANDLE` once a
+stream is closed; when one is ready, call `spw_proc_wait(proc, 0)`.
 
-### Windows command line
+### After it ends
 
-`spw_win_quote` writes the command line that `CommandLineToArgvW` and the Microsoft C runtime
-both split back into exactly the given arguments. It is pure logic, available on every system.
-The program name cannot contain `"`. `buf_len` is the buffer capacity; `out_len` receives the
-length without the final NUL, and `SPW_ERR_RANGE` means the buffer is too small (pass `NULL`
-and `0` to ask for the length).
+- `spw_proc_status` gives the exit code and, on POSIX, the signal; a signal means exit code
+  `-1`, and a killed Windows process exits with `1`.
+- `spw_proc_output` returns the captured bytes, valid until the next `spw_proc_wait` or
+  `spw_proc_destroy`; `spw_proc_dropped` counts what the output limit threw away.
+- `spw_proc_killed` tells a kill (by `spw_proc_kill`, the time limit or the callback) from a
+  normal end, the only way on Windows to tell a kill from `exit(1)`.
+- `spw_proc_kill` kills the tree now and `spw_proc_terminate` asks it to stop with `SIGTERM`
+  (`SPW_ERR_UNSUPPORTED` on Windows).
+- `spw_proc_destroy` kills and collects a process that still runs. On POSIX an ended process
+  stays a zombie until then, so its pid and process group cannot be reused and a late kill
+  never reaches an unrelated group.
 
-### Limits
+### Windows command lines
 
-- POSIX: the child gets its own process group so the tree can be killed. A child in a
-  background group that reads from a terminal is stopped by `SIGTTIN`: give it `SPW_NULL` or
-  `SPW_PIPE` on stdin. Descendants that start their own process group or session (daemons,
-  shells with job control) leave the tree and are not killed by the time limit
-- Windows: descendants created with `CREATE_BREAKAWAY_FROM_JOB` leave the tree. Batch files
-  (`.bat`, `.cmd`) run through `cmd.exe`, which has different quoting rules; they are refused
-  with `SPW_ERR_UNSUPPORTED`. Run `cmd.exe /c` yourself if you need them
-- when a descendant keeps an output pipe open after the child exits, `spw_proc_wait` keeps
-  waiting for it; set a time limit if that can happen
+`spw_win_quote` builds the command line that `CommandLineToArgvW` and the Microsoft C runtime
+both split back into exactly the given arguments. It is plain string logic and builds on every
+system. The program name cannot contain `"`; `SPW_ERR_RANGE` means the buffer is too small, and
+`NULL` with `0` asks for the length.
 
-## Versioning
+### What it cannot do
 
-Semantic Versioning. Compatible releases bump the minor version; incompatible ones bump the
-major version and the soname. See [CHANGELOG.md](CHANGELOG.md).
+- POSIX children get their own process group. One that reads a terminal from the background
+  is stopped by `SIGTTIN`, so give it `SPW_NULL` or `SPW_PIPE` on stdin. Descendants that start
+  their own group or session (daemons, shells with job control) leave the tree.
+- On Windows, descendants created with `CREATE_BREAKAWAY_FROM_JOB` leave the tree, and `.bat`
+  and `.cmd` files are refused with `SPW_ERR_UNSUPPORTED`, since `cmd.exe` quotes differently.
+  Run `cmd.exe /c` yourself if you need one.
+- A descendant that keeps an output pipe open after the child exits keeps `spw_proc_wait`
+  waiting. Set a time limit when that can happen.
 
-## License
+## Building
 
-MIT, see [LICENSE](LICENSE).
+```sh
+cmake -S . -B build -DBUILD_SHARED_LIBS=ON
+cmake --build build
+cmake --install build --prefix /usr/local
+```
+
+```cmake
+find_package(cmdspawn REQUIRED)
+target_link_libraries(app PRIVATE cmdspawn::cmdspawn)
+```
+
+Without CMake: `cc app.c $(pkg-config --cflags --libs cmdspawn)`.
+
+The library also comes as one header. `scripts/amalgamate.sh` writes `dist/cmdspawn/cmdspawn.h`;
+copy the `cmdspawn` folder onto your include path and, in one `.c` file, before any other
+include:
+
+```c
+#define SPW_IMPLEMENTATION
+#include "cmdspawn/cmdspawn.h"
+```
+
+`SPW_STATIC` keeps every function private to that file.
+
+## Tests
+
+```sh
+cmake --preset dev && cmake --build build/dev && ctest --preset dev
+```
+
+The `dev` preset builds with ASan, UBSan and `-Werror`. The suite starts a helper program to
+check arguments, environment, pipes, time limits, process groups, start errors and
+allocation failures, and compares `spw_win_quote` with a reference splitter on every platform; `cmake --preset fuzz` builds
+`fuzz_win_quote`, which feeds it random arguments. On each push, CI also builds with MSVC,
+installs on Linux, macOS and Windows, and checks the ABI against `abi/cmdspawn.abi`.
+
+Versions follow Semantic Versioning, with the soname bumped on every major release; the
+[CHANGELOG](CHANGELOG.md) lists what changed. Security reports go through
+[SECURITY.md](SECURITY.md). License: MIT ([LICENSE](LICENSE)).
