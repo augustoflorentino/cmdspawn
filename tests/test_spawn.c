@@ -912,6 +912,52 @@ static void test_spawn_errors(void)
     CHECK(strcmp(spw_strerror(SPW_ERR_FORMAT), spw_strerror(-1)) != 0);
 }
 
+static int wait_for_output(spw_proc_t *proc, size_t want)
+{
+    size_t len = 0;
+    int tries;
+
+    for (tries = 0; tries < 500; tries++) {
+        CHECK(spw_proc_wait(proc, 20) == SPW_ERR_AGAIN);
+        spw_proc_output(proc, SPW_STDOUT, &len);
+        if (len >= want)
+            return 1;
+    }
+    return 0;
+}
+
+static void test_open_input(void)
+{
+    spw_cmd_t *cmd = helper_cmd("lines", NULL);
+    spw_proc_t *proc;
+    const unsigned char first[] = "one\n";
+    const unsigned char second[] = "two\n";
+
+    CHECK(spw_cmd_stdio(cmd, SPW_STDIN, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_stdio(cmd, SPW_STDOUT, SPW_PIPE) == SPW_OK);
+    CHECK(spw_cmd_input(cmd, (const unsigned char *)"zero\n", 5) == SPW_OK);
+    CHECK(spw_cmd_input_open(cmd, 1) == SPW_OK);
+    CHECK(spw_spawn(cmd, &proc) == SPW_OK);
+    CHECK(wait_for_output(proc, 5));
+    CHECK(spw_proc_write(proc, first, 4) == SPW_OK);
+    CHECK(wait_for_output(proc, 9));
+    CHECK(output_is(proc, SPW_STDOUT, "zero\none\n"));
+    CHECK(spw_proc_write(proc, second, 4) == SPW_OK);
+    CHECK(spw_proc_write(proc, NULL, 0) == SPW_OK);
+    CHECK(spw_proc_close_input(proc) == SPW_OK);
+    CHECK(spw_proc_write(proc, first, 4) == SPW_ERR_IO);
+    CHECK(spw_proc_wait(proc, -1) == SPW_OK);
+    CHECK(output_is(proc, SPW_STDOUT, "zero\none\ntwo\n"));
+    spw_proc_destroy(proc);
+    CHECK(spw_cmd_input_open(cmd, 0) == SPW_OK);
+    CHECK(spw_spawn(cmd, &proc) == SPW_OK);
+    CHECK(spw_proc_write(proc, first, 4) == SPW_ERR_IO);
+    CHECK(spw_proc_wait(proc, -1) == SPW_OK);
+    CHECK(output_is(proc, SPW_STDOUT, "zero\n"));
+    spw_proc_destroy(proc);
+    spw_cmd_destroy(cmd);
+}
+
 static void test_path_search(void)
 {
 #if defined(_WIN32)
@@ -992,6 +1038,9 @@ static void test_bad_args(void)
     CHECK(spw_cmd_kill_grace(NULL, 1) == SPW_ERR_ARG);
     CHECK(spw_proc_dropped(NULL, SPW_STDOUT) == 0);
     CHECK(!spw_proc_killed(NULL));
+    CHECK(spw_cmd_input_open(NULL, 1) == SPW_ERR_ARG);
+    CHECK(spw_proc_write(NULL, NULL, 0) == SPW_ERR_ARG);
+    CHECK(spw_proc_close_input(NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_spawn_detached(NULL, NULL) == SPW_ERR_ARG);
     CHECK(spw_proc_wait(NULL, 0) == SPW_ERR_ARG);
@@ -1126,6 +1175,7 @@ int main(int argc, char **argv)
 #endif
     test_not_found();
     test_spawn_errors();
+    test_open_input();
     test_poll_and_kill();
     test_destroy_running();
     test_timeout_kills_tree();

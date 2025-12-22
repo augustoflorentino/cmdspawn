@@ -72,6 +72,7 @@ SPW_API int spw_cmd_input(spw_cmd_t *cmd, const unsigned char *data, size_t data
 SPW_API int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms);
 SPW_API int spw_cmd_output_limit(spw_cmd_t *cmd, size_t max_bytes);
 SPW_API int spw_cmd_same_group(spw_cmd_t *cmd, int enabled);
+SPW_API int spw_cmd_input_open(spw_cmd_t *cmd, int enabled);
 SPW_API int spw_cmd_kill_grace(spw_cmd_t *cmd, long grace_ms);
 SPW_API int spw_cmd_output_fn(spw_cmd_t *cmd, spw_output_fn output_fn, void *output_ctx);
 
@@ -82,6 +83,8 @@ SPW_API void spw_proc_destroy(spw_proc_t *proc);
 SPW_API int spw_proc_wait(spw_proc_t *proc, long timeout_ms);
 SPW_API int spw_proc_kill(spw_proc_t *proc);
 SPW_API int spw_proc_terminate(spw_proc_t *proc);
+SPW_API int spw_proc_write(spw_proc_t *proc, const unsigned char *data, size_t data_len);
+SPW_API int spw_proc_close_input(spw_proc_t *proc);
 SPW_API int spw_proc_status(const spw_proc_t *proc, int *out_exit_code, int *out_signal);
 SPW_API int spw_proc_killed(const spw_proc_t *proc);
 SPW_API long spw_proc_pid(const spw_proc_t *proc);

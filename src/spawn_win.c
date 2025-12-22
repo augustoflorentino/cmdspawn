@@ -32,6 +32,7 @@ struct spw_proc {
     int timed_out;
     int stopped;
     int killed;
+    int input_open;
     ULONGLONG deadline;
 };
 
@@ -486,6 +487,7 @@ static int spw_proc_setup(const spw_cmd_t *cmd, struct spw_wprep *prep, spw_proc
     memset(proc, 0, sizeof(*proc));
     proc->mem = cmd->mem;
     *out_proc = proc;
+    proc->input_open = cmd->input_open;
     if (cmd->input_len > 0) {
         proc->input = spw_mem_alloc(&cmd->mem, cmd->input_len);
         if (proc->input == NULL)
@@ -617,7 +619,8 @@ static int spw_pipe_start(spw_proc_t *proc, int stream)
     if (proc->pipes[stream].h == NULL)
         return SPW_OK;
     if (stream == SPW_STDIN && proc->input_off >= proc->input_len) {
-        spw_pipe_close(&proc->pipes[stream]);
+        if (!proc->input_open)
+            spw_pipe_close(&proc->pipes[stream]);
         return SPW_OK;
     }
     spw_pipe_issue(proc, stream);
@@ -713,6 +716,46 @@ int spw_proc_kill(spw_proc_t *proc)
         TerminateJobObject(proc->job, 1);
     if (!proc->exited)
         TerminateProcess(proc->process, 1);
+    return SPW_OK;
+}
+
+static void spw_pipe_settle(spw_proc_t *proc)
+{
+    struct spw_wpipe *pipe = &proc->pipes[SPW_STDIN];
+    DWORD n = 0;
+
+    if (!pipe->pending)
+        return;
+    CancelIoEx(pipe->h, &pipe->ov);
+    if (GetOverlappedResult(pipe->h, &pipe->ov, &n, TRUE) || GetLastError() == ERROR_OPERATION_ABORTED)
+        proc->input_off += n;
+    pipe->pending = 0;
+}
+
+int spw_proc_write(spw_proc_t *proc, const unsigned char *data, size_t data_len)
+{
+    int status;
+
+    if (proc == NULL || (data == NULL && data_len > 0))
+        return SPW_ERR_ARG;
+    if (proc->pipes[SPW_STDIN].h == NULL || !proc->input_open)
+        return SPW_ERR_IO;
+    if (data_len == 0)
+        return SPW_OK;
+    spw_pipe_settle(proc);
+    status = spw_input_append(&proc->mem, &proc->input, &proc->input_len, &proc->input_off, data, data_len);
+    if (status != SPW_OK)
+        return status;
+    return spw_pipe_start(proc, SPW_STDIN);
+}
+
+int spw_proc_close_input(spw_proc_t *proc)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    proc->input_open = 0;
+    if (proc->pipes[SPW_STDIN].h != NULL && !proc->pipes[SPW_STDIN].pending)
+        spw_pipe_close(&proc->pipes[SPW_STDIN]);
     return SPW_OK;
 }
 

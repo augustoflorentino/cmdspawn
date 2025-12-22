@@ -50,6 +50,7 @@ struct spw_proc {
     int timed_out;
     int stopped;
     int reaped;
+    int input_open;
     int killed;
     int own_group;
     long grace_ms;
@@ -514,7 +515,8 @@ int spw_spawn(const spw_cmd_t *cmd, spw_proc_t **out_proc)
         proc->deadline = spw_now_ms() + cmd->timeout_ms;
     proc->own_group = !cmd->same_group;
     proc->grace_ms = cmd->grace_ms;
-    if (proc->fds[SPW_STDIN] >= 0 && proc->input_len == 0)
+    proc->input_open = cmd->input_open;
+    if (proc->fds[SPW_STDIN] >= 0 && proc->input_len == 0 && !proc->input_open)
         spw_close(&proc->fds[SPW_STDIN]);
     *out_proc = proc;
     return SPW_OK;
@@ -661,7 +663,8 @@ static void spw_feed(spw_proc_t *proc)
         proc->input_off += (size_t)n;
         left -= (size_t)n;
     }
-    spw_close(&proc->fds[SPW_STDIN]);
+    if (left > 0 || !proc->input_open)
+        spw_close(&proc->fds[SPW_STDIN]);
 }
 
 static int spw_poll_once(spw_proc_t *proc, int wait_ms)
@@ -674,7 +677,7 @@ static int spw_poll_once(spw_proc_t *proc, int wait_ms)
     int s;
 
     for (s = 0; s < 3; s++) {
-        if (proc->fds[s] < 0)
+        if (proc->fds[s] < 0 || (s == SPW_STDIN && proc->input_off >= proc->input_len))
             continue;
         pfds[n].fd = proc->fds[s];
         pfds[n].events = s == SPW_STDIN ? POLLOUT : POLLIN;
@@ -753,6 +756,33 @@ int spw_proc_kill(spw_proc_t *proc)
         proc->killed = 1;
     spw_signal_tree(proc, SIGKILL);
     proc->kill_at = 0;
+    return SPW_OK;
+}
+
+int spw_proc_write(spw_proc_t *proc, const unsigned char *data, size_t data_len)
+{
+    int status;
+
+    if (proc == NULL || (data == NULL && data_len > 0))
+        return SPW_ERR_ARG;
+    if (proc->fds[SPW_STDIN] < 0 || !proc->input_open)
+        return SPW_ERR_IO;
+    if (data_len == 0)
+        return SPW_OK;
+    status = spw_input_append(&proc->mem, &proc->input, &proc->input_len, &proc->input_off, data, data_len);
+    if (status != SPW_OK)
+        return status;
+    spw_feed(proc);
+    return SPW_OK;
+}
+
+int spw_proc_close_input(spw_proc_t *proc)
+{
+    if (proc == NULL)
+        return SPW_ERR_ARG;
+    proc->input_open = 0;
+    if (proc->input_off >= proc->input_len)
+        spw_close(&proc->fds[SPW_STDIN]);
     return SPW_OK;
 }
 

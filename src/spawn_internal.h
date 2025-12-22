@@ -40,6 +40,7 @@ struct spw_cmd {
     long timeout_ms;
     long grace_ms;
     int same_group;
+    int input_open;
     size_t output_limit;
     spw_output_fn output_fn;
     void *output_ctx;
@@ -58,6 +59,8 @@ struct spw_out {
 };
 
 void *spw_mem_alloc(const struct spw_mem *mem, size_t size);
+int spw_input_append(const struct spw_mem *mem, unsigned char **buf, size_t *len, size_t *off,
+                     const unsigned char *data, size_t data_len);
 void spw_mem_free(const struct spw_mem *mem, void *ptr);
 char *spw_mem_strdup(const struct spw_mem *mem, const char *str);
 char *spw_mem_join(const struct spw_mem *mem, const char *a, size_t a_len, char sep, const char *b);

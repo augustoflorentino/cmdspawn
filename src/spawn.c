@@ -341,6 +341,35 @@ int spw_cmd_timeout(spw_cmd_t *cmd, long timeout_ms)
     return SPW_OK;
 }
 
+int spw_cmd_input_open(spw_cmd_t *cmd, int enabled)
+{
+    if (cmd == NULL)
+        return SPW_ERR_ARG;
+    cmd->input_open = enabled != 0;
+    return SPW_OK;
+}
+
+int spw_input_append(const struct spw_mem *mem, unsigned char **buf, size_t *len, size_t *off,
+                     const unsigned char *data, size_t data_len)
+{
+    size_t left = *len - *off;
+    unsigned char *grown;
+
+    if (left > SIZE_MAX - data_len)
+        return SPW_ERR_NOMEM;
+    grown = spw_mem_alloc(mem, left + data_len);
+    if (grown == NULL)
+        return SPW_ERR_NOMEM;
+    if (left > 0)
+        memcpy(grown, *buf + *off, left);
+    memcpy(grown + left, data, data_len);
+    spw_mem_free(mem, *buf);
+    *buf = grown;
+    *len = left + data_len;
+    *off = 0;
+    return SPW_OK;
+}
+
 int spw_cmd_same_group(spw_cmd_t *cmd, int enabled)
 {
     if (cmd == NULL)

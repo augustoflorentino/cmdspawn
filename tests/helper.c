@@ -49,6 +49,17 @@ static int cmd_cat(void)
     return 0;
 }
 
+static int cmd_lines(void)
+{
+    char line[256];
+
+    while (fgets(line, sizeof(line), stdin) != NULL) {
+        fputs(line, stdout);
+        fflush(stdout);
+    }
+    return 0;
+}
+
 static int cmd_flood(long total)
 {
     static char outs[4096];
@@ -275,6 +286,8 @@ static int run(int argc, char **argv)
 
     if (strcmp(mode, "exit") == 0)
         return (int)n;
+    if (strcmp(mode, "lines") == 0)
+        return cmd_lines();
     if (strcmp(mode, "cat") == 0)
         return cmd_cat();
     if (strcmp(mode, "flood") == 0)
