@@ -4,6 +4,24 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 3.0.0 - 2025-12-21
+
+Incompatible change: what `spw_spawn` and `spw_spawn_detached` return when the program cannot
+start.
+
+- new `SPW_ERR_ACCESS` (no permission to run the file) and `SPW_ERR_FORMAT` (not a program the
+  system can run). Before, both came back as `SPW_ERR_SPAWN`, so a caller could not tell
+  "chmod +x the file" from "the system ran out of processes" without guessing
+- soname `libcmdspawn.so.3`
+
+### Upgrading
+
+- code that treats `SPW_ERR_SPAWN` as "could not start this program" should accept
+  `SPW_ERR_ACCESS` and `SPW_ERR_FORMAT` as well; `SPW_ERR_SPAWN` now means only system
+  failures
+- `spw_strerror` already describes the new codes
+- rebuild; programs linked to `libcmdspawn.so.2` keep using the old library
+
 ## 2.2.0 - 2025-12-12
 
 New function and a fix; no change needed in existing code.
