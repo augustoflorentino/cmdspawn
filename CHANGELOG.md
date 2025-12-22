@@ -4,6 +4,14 @@ Each release lists what changed, what updating means for existing code, and ever
 
 ## Unreleased
 
+## 3.5.0 - 2025-12-21
+
+New functions; no change needed in existing code.
+
+- `spw_cmd_input_open`, `spw_proc_write` and `spw_proc_close_input`: keep stdin open and feed
+  it while the child runs. Before, stdin could only be filled before the start and was closed
+  once written, so a program that answers line by line could not be driven
+
 ## 3.0.0 - 2025-12-21
 
 Incompatible change: what `spw_spawn` and `spw_spawn_detached` return when the program cannot

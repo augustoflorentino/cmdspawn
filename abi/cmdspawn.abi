@@ -10,12 +10,14 @@
     <elf-symbol name='spw_cmd_env' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_env_clear' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_input' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='spw_cmd_input_open' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_kill_grace' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_output_fn' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_output_limit' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_same_group' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_stdio' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_cmd_timeout' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='spw_proc_close_input' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_proc_destroy' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_proc_dropped' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_proc_handle' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -26,6 +28,7 @@
     <elf-symbol name='spw_proc_status' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_proc_terminate' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_proc_wait' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
+    <elf-symbol name='spw_proc_write' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_spawn' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_spawn_detached' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
     <elf-symbol name='spw_strerror' type='func-type' binding='global-binding' visibility='default-visibility' is-defined='yes'/>
@@ -43,7 +46,7 @@
     <pointer-type-def type-id='type-id-9' size-in-bits='64' hash='462ed913cfdb1d83' id='type-id-10'/>
     <qualified-type-def type-id='type-id-11' const='yes' hash='ad5ca8f539a508e0' id='type-id-12'/>
     <pointer-type-def type-id='type-id-12' size-in-bits='64' hash='281980d6dbd5b2d5' id='type-id-13'/>
-    <qualified-type-def type-id='type-id-14' const='yes' hash='a102a6884b08e795' id='type-id-15'/>
+    <qualified-type-def type-id='type-id-14' const='yes' hash='7fa19af840c5bc08' id='type-id-15'/>
     <pointer-type-def type-id='type-id-15' size-in-bits='64' hash='b93dd161c33962ee' id='type-id-16'/>
     <qualified-type-def type-id='type-id-17' const='yes' hash='1341ea448978b3ff' id='type-id-18'/>
     <pointer-type-def type-id='type-id-18' size-in-bits='64' hash='945d60bbed1a29fa' id='type-id-19'/>
@@ -150,71 +153,77 @@
       <parameter type-id='type-id-52'/>
       <return type-id='type-id-21'/>
     </function-type>
-    <function-type size-in-bits='64' hash='0d4ee2c648f42c91' id='type-id-53'>
+    <function-type size-in-bits='64' hash='16eabb35f5246b63' id='type-id-53'>
+      <parameter type-id='type-id-52'/>
+      <parameter type-id='type-id-19'/>
+      <parameter type-id='type-id-25'/>
+      <return type-id='type-id-21'/>
+    </function-type>
+    <function-type size-in-bits='64' hash='0d4ee2c648f42c91' id='type-id-54'>
       <parameter type-id='type-id-52'/>
       <parameter type-id='type-id-47'/>
       <return type-id='type-id-21'/>
     </function-type>
-    <function-type size-in-bits='64' hash='00936add60f201f6' id='type-id-54'>
+    <function-type size-in-bits='64' hash='00936add60f201f6' id='type-id-55'>
       <parameter type-id='type-id-36'/>
       <parameter type-id='type-id-21'/>
       <parameter type-id='type-id-19'/>
       <parameter type-id='type-id-25'/>
       <return type-id='type-id-21'/>
     </function-type>
-    <function-type size-in-bits='64' hash='016c7576f4949d61' id='type-id-55'>
+    <function-type size-in-bits='64' hash='016c7576f4949d61' id='type-id-56'>
       <parameter type-id='type-id-16'/>
       <return type-id='type-id-47'/>
     </function-type>
-    <function-type size-in-bits='64' hash='315740116383ee8d' id='type-id-56'>
+    <function-type size-in-bits='64' hash='315740116383ee8d' id='type-id-57'>
       <parameter type-id='type-id-16'/>
       <parameter type-id='type-id-21'/>
       <return type-id='type-id-25'/>
     </function-type>
-    <function-type size-in-bits='64' hash='473288057994a015' id='type-id-57'>
+    <function-type size-in-bits='64' hash='473288057994a015' id='type-id-58'>
       <parameter type-id='type-id-16'/>
       <parameter type-id='type-id-21'/>
-      <return type-id='type-id-58'/>
+      <return type-id='type-id-59'/>
     </function-type>
-    <function-type size-in-bits='64' hash='70e40e5c5d2d9818' id='type-id-59'>
+    <function-type size-in-bits='64' hash='70e40e5c5d2d9818' id='type-id-60'>
       <parameter type-id='type-id-39'/>
-      <return type-id='type-id-60'/>
+      <return type-id='type-id-61'/>
     </function-type>
-    <function-type size-in-bits='64' hash='b70c9b6d0b7be1ae' id='type-id-61'>
+    <function-type size-in-bits='64' hash='b70c9b6d0b7be1ae' id='type-id-62'>
       <parameter type-id='type-id-52'/>
-      <return type-id='type-id-60'/>
+      <return type-id='type-id-61'/>
     </function-type>
-    <function-type size-in-bits='64' hash='edf938d82551349a' id='type-id-62'>
+    <function-type size-in-bits='64' hash='edf938d82551349a' id='type-id-63'>
       <parameter type-id='type-id-36'/>
       <parameter type-id='type-id-36'/>
-      <return type-id='type-id-60'/>
+      <return type-id='type-id-61'/>
     </function-type>
-    <function-type size-in-bits='64' hash='dbc09a9870c76547' id='type-id-63'>
+    <function-type size-in-bits='64' hash='dbc09a9870c76547' id='type-id-64'>
       <parameter type-id='type-id-36'/>
       <parameter type-id='type-id-25'/>
       <return type-id='type-id-36'/>
     </function-type>
     <type-decl name='int' size-in-bits='32' hash='09d17c08f594edc7' id='type-id-21'/>
-    <pointer-type-def type-id='type-id-54' size-in-bits='64' hash='026be2f62ab498e1' id='type-id-64'/>
+    <pointer-type-def type-id='type-id-55' size-in-bits='64' hash='026be2f62ab498e1' id='type-id-65'/>
     <pointer-type-def type-id='type-id-21' size-in-bits='64' hash='d546a866961a5bb9' id='type-id-32'/>
-    <array-type-def dimensions='1' type-id='type-id-21' size-in-bits='96' hash='5663e6cf74af198d' id='type-id-65'>
+    <array-type-def dimensions='1' type-id='type-id-21' size-in-bits='96' hash='5663e6cf74af198d' id='type-id-66'>
       <subrange length='3' lower-bound='0' upper-bound='2' type-id='type-id-1' size-in-bits='64' is-anonymous='yes' hash='30d99d19f0f4b2ea' id='type-id-3'/>
     </array-type-def>
     <type-decl name='long int' size-in-bits='64' hash='8aa1e1a2ab2c2d3e' id='type-id-47'/>
     <pointer-type-def type-id='type-id-47' size-in-bits='64' hash='d546a866961a5bb9#1' id='type-id-27'/>
-    <type-decl name='long long int' size-in-bits='64' hash='8aa1e1a2ab2c2d3e#1' id='type-id-66'/>
+    <type-decl name='long long int' size-in-bits='64' hash='8aa1e1a2ab2c2d3e#1' id='type-id-67'/>
     <pointer-type-def type-id='type-id-25' size-in-bits='64' hash='fce61c10660e5f2d' id='type-id-23'/>
     <pointer-type-def type-id='type-id-11' size-in-bits='64' hash='f280e8aef2be3957' id='type-id-39'/>
     <pointer-type-def type-id='type-id-39' size-in-bits='64' hash='3425f841feaf3c2d' id='type-id-37'/>
-    <pointer-type-def type-id='type-id-67' size-in-bits='64' hash='5098842fed15049a' id='type-id-68'/>
-    <array-type-def dimensions='1' type-id='type-id-69' size-in-bits='1024' hash='7e5152fb6b0c5470' id='type-id-70'>
+    <pointer-type-def type-id='type-id-68' size-in-bits='64' hash='5098842fed15049a' id='type-id-69'/>
+    <array-type-def dimensions='1' type-id='type-id-70' size-in-bits='1024' hash='7e5152fb6b0c5470' id='type-id-71'>
       <subrange length='2' lower-bound='0' upper-bound='1' type-id='type-id-1' size-in-bits='64' is-anonymous='yes' hash='95f31efc53154467' id='type-id-2'/>
     </array-type-def>
     <pointer-type-def type-id='type-id-14' size-in-bits='64' hash='31d5247f957e8297' id='type-id-52'/>
     <pointer-type-def type-id='type-id-52' size-in-bits='64' hash='ce22de3035b1cc8e' id='type-id-29'/>
-    <class-decl name='spw_cmd' is-struct='yes' visibility='default' size-in-bits='1344' hash='e8c65b395a9049d6' id='type-id-71'>
+    <class-decl name='spw_cmd' is-struct='yes' visibility='default' size-in-bits='1344' hash='1df3ba1bc1e4a80e' id='type-id-72'>
       <data-member access='public' layout-offset-in-bits='0'>
-        <var-decl name='mem' type-id='type-id-72' visibility='default'/>
+        <var-decl name='mem' type-id='type-id-73' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='192'>
         <var-decl name='args' type-id='type-id-6' visibility='default'/>
@@ -226,7 +235,7 @@
         <var-decl name='args_cap' type-id='type-id-25' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='384'>
-        <var-decl name='env' type-id='type-id-68' visibility='default'/>
+        <var-decl name='env' type-id='type-id-69' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='448'>
         <var-decl name='env_len' type-id='type-id-25' visibility='default'/>
@@ -241,10 +250,10 @@
         <var-decl name='cwd' type-id='type-id-5' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='704'>
-        <var-decl name='modes' type-id='type-id-65' visibility='default'/>
+        <var-decl name='modes' type-id='type-id-66' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='832'>
-        <var-decl name='input' type-id='type-id-73' visibility='default'/>
+        <var-decl name='input' type-id='type-id-74' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='896'>
         <var-decl name='input_len' type-id='type-id-25' visibility='default'/>
@@ -258,6 +267,9 @@
       <data-member access='public' layout-offset-in-bits='1088'>
         <var-decl name='same_group' type-id='type-id-21' visibility='default'/>
       </data-member>
+      <data-member access='public' layout-offset-in-bits='1120'>
+        <var-decl name='input_open' type-id='type-id-21' visibility='default'/>
+      </data-member>
       <data-member access='public' layout-offset-in-bits='1152'>
         <var-decl name='output_limit' type-id='type-id-25' visibility='default'/>
       </data-member>
@@ -268,7 +280,7 @@
         <var-decl name='output_ctx' type-id='type-id-36' visibility='default'/>
       </data-member>
     </class-decl>
-    <class-decl name='spw_env_mod' is-struct='yes' visibility='default' size-in-bits='192' hash='b0daf405e96bb077' id='type-id-67'>
+    <class-decl name='spw_env_mod' is-struct='yes' visibility='default' size-in-bits='192' hash='b0daf405e96bb077' id='type-id-68'>
       <data-member access='public' layout-offset-in-bits='0'>
         <var-decl name='entry' type-id='type-id-5' visibility='default'/>
       </data-member>
@@ -279,7 +291,7 @@
         <var-decl name='unset' type-id='type-id-21' visibility='default'/>
       </data-member>
     </class-decl>
-    <class-decl name='spw_mem' is-struct='yes' visibility='default' size-in-bits='192' hash='45e377da7d98b388' id='type-id-72'>
+    <class-decl name='spw_mem' is-struct='yes' visibility='default' size-in-bits='192' hash='45e377da7d98b388' id='type-id-73'>
       <data-member access='public' layout-offset-in-bits='0'>
         <var-decl name='alloc_fn' type-id='type-id-34' visibility='default'/>
       </data-member>
@@ -290,9 +302,9 @@
         <var-decl name='alloc_ctx' type-id='type-id-36' visibility='default'/>
       </data-member>
     </class-decl>
-    <class-decl name='spw_out' is-struct='yes' visibility='default' size-in-bits='512' hash='ad71caa624ddcec0' id='type-id-69'>
+    <class-decl name='spw_out' is-struct='yes' visibility='default' size-in-bits='512' hash='ad71caa624ddcec0' id='type-id-70'>
       <data-member access='public' layout-offset-in-bits='0'>
-        <var-decl name='data' type-id='type-id-73' visibility='default'/>
+        <var-decl name='data' type-id='type-id-74' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='64'>
         <var-decl name='len' type-id='type-id-25' visibility='default'/>
@@ -319,21 +331,21 @@
         <var-decl name='stopped' type-id='type-id-21' visibility='default'/>
       </data-member>
     </class-decl>
-    <class-decl name='spw_proc' is-struct='yes' visibility='default' size-in-bits='2048' hash='f9d237991cc404ca' id='type-id-74'>
+    <class-decl name='spw_proc' is-struct='yes' visibility='default' size-in-bits='2112' hash='9aea9b2ead4031e1' id='type-id-75'>
       <data-member access='public' layout-offset-in-bits='0'>
-        <var-decl name='mem' type-id='type-id-72' visibility='default'/>
+        <var-decl name='mem' type-id='type-id-73' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='192'>
-        <var-decl name='pid' type-id='type-id-75' visibility='default'/>
+        <var-decl name='pid' type-id='type-id-76' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='224'>
         <var-decl name='pidfd' type-id='type-id-21' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='256'>
-        <var-decl name='fds' type-id='type-id-65' visibility='default'/>
+        <var-decl name='fds' type-id='type-id-66' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='384'>
-        <var-decl name='input' type-id='type-id-73' visibility='default'/>
+        <var-decl name='input' type-id='type-id-74' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='448'>
         <var-decl name='input_len' type-id='type-id-25' visibility='default'/>
@@ -342,7 +354,7 @@
         <var-decl name='input_off' type-id='type-id-25' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='576'>
-        <var-decl name='out' type-id='type-id-70' visibility='default'/>
+        <var-decl name='out' type-id='type-id-71' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1600'>
         <var-decl name='exited' type-id='type-id-21' visibility='default'/>
@@ -363,37 +375,40 @@
         <var-decl name='reaped' type-id='type-id-21' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1792'>
-        <var-decl name='killed' type-id='type-id-21' visibility='default'/>
+        <var-decl name='input_open' type-id='type-id-21' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1824'>
-        <var-decl name='own_group' type-id='type-id-21' visibility='default'/>
+        <var-decl name='killed' type-id='type-id-21' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1856'>
-        <var-decl name='grace_ms' type-id='type-id-47' visibility='default'/>
+        <var-decl name='own_group' type-id='type-id-21' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1920'>
-        <var-decl name='deadline' type-id='type-id-66' visibility='default'/>
+        <var-decl name='grace_ms' type-id='type-id-47' visibility='default'/>
       </data-member>
       <data-member access='public' layout-offset-in-bits='1984'>
-        <var-decl name='kill_at' type-id='type-id-66' visibility='default'/>
+        <var-decl name='deadline' type-id='type-id-67' visibility='default'/>
+      </data-member>
+      <data-member access='public' layout-offset-in-bits='2048'>
+        <var-decl name='kill_at' type-id='type-id-67' visibility='default'/>
       </data-member>
     </class-decl>
-    <typedef-decl name='__pid_t' type-id='type-id-21' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-76'/>
-    <typedef-decl name='pid_t' type-id='type-id-76' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-75'/>
+    <typedef-decl name='__pid_t' type-id='type-id-21' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-77'/>
+    <typedef-decl name='pid_t' type-id='type-id-77' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-76'/>
     <typedef-decl name='size_t' type-id='type-id-1' size-in-bits='64' hash='8b230c0ebd12548b' id='type-id-25'/>
-    <typedef-decl name='spw_alloc_fn' type-id='type-id-77' size-in-bits='64' hash='77dcac2fc426a312' id='type-id-34'/>
-    <typedef-decl name='spw_cmd_t' type-id='type-id-71' size-in-bits='1344' hash='98bf52974687c102' id='type-id-11'/>
-    <typedef-decl name='spw_free_fn' type-id='type-id-78' size-in-bits='64' hash='21d4fa73e6c6f741' id='type-id-35'/>
-    <typedef-decl name='spw_handle_t' type-id='type-id-21' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-58'/>
-    <typedef-decl name='spw_output_fn' type-id='type-id-64' size-in-bits='64' hash='93821059f90279f4' id='type-id-50'/>
-    <typedef-decl name='spw_proc_t' type-id='type-id-74' size-in-bits='2048' hash='7cd518585f22d828' id='type-id-14'/>
+    <typedef-decl name='spw_alloc_fn' type-id='type-id-78' size-in-bits='64' hash='77dcac2fc426a312' id='type-id-34'/>
+    <typedef-decl name='spw_cmd_t' type-id='type-id-72' size-in-bits='1344' hash='98bf52974687c102' id='type-id-11'/>
+    <typedef-decl name='spw_free_fn' type-id='type-id-79' size-in-bits='64' hash='21d4fa73e6c6f741' id='type-id-35'/>
+    <typedef-decl name='spw_handle_t' type-id='type-id-21' size-in-bits='32' hash='f2b82e49c8af56cd' id='type-id-59'/>
+    <typedef-decl name='spw_output_fn' type-id='type-id-65' size-in-bits='64' hash='93821059f90279f4' id='type-id-50'/>
+    <typedef-decl name='spw_proc_t' type-id='type-id-75' size-in-bits='2112' hash='85afe5eeb51385e9' id='type-id-14'/>
     <type-decl name='unsigned char' size-in-bits='8' hash='6ebac62b3366db68' id='type-id-17'/>
-    <pointer-type-def type-id='type-id-17' size-in-bits='64' hash='daf9679977094cab' id='type-id-73'/>
+    <pointer-type-def type-id='type-id-17' size-in-bits='64' hash='daf9679977094cab' id='type-id-74'/>
     <type-decl name='unsigned long int' size-in-bits='64' hash='da551c1631705dfe' id='type-id-1'/>
-    <type-decl name='void' hash='8dcbc64750c3d4e3' id='type-id-60'/>
-    <pointer-type-def type-id='type-id-62' size-in-bits='64' hash='c559852600f1c7c8' id='type-id-78'/>
-    <pointer-type-def type-id='type-id-60' hash='19e246ce75ee6a42' id='type-id-36'/>
-    <pointer-type-def type-id='type-id-63' size-in-bits='64' hash='2390ef35ddf7f554' id='type-id-77'/>
+    <type-decl name='void' hash='8dcbc64750c3d4e3' id='type-id-61'/>
+    <pointer-type-def type-id='type-id-63' size-in-bits='64' hash='c559852600f1c7c8' id='type-id-79'/>
+    <pointer-type-def type-id='type-id-61' hash='19e246ce75ee6a42' id='type-id-36'/>
+    <pointer-type-def type-id='type-id-64' size-in-bits='64' hash='2390ef35ddf7f554' id='type-id-78'/>
   </abi-types>
   <abi-instr address-size='64' path='src/spawn.c' language='LANG_C99'>
       <function-decl name='spw_strerror' type-id='type-id-20' mangled-name='spw_strerror' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_strerror'/>
@@ -403,6 +418,7 @@
       <function-decl name='spw_cmd_env' type-id='type-id-42' mangled-name='spw_cmd_env' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_env'/>
       <function-decl name='spw_cmd_env_clear' type-id='type-id-38' mangled-name='spw_cmd_env_clear' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_env_clear'/>
       <function-decl name='spw_cmd_input' type-id='type-id-43' mangled-name='spw_cmd_input' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_input'/>
+      <function-decl name='spw_cmd_input_open' type-id='type-id-44' mangled-name='spw_cmd_input_open' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_input_open'/>
       <function-decl name='spw_cmd_kill_grace' type-id='type-id-46' mangled-name='spw_cmd_kill_grace' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_kill_grace'/>
       <function-decl name='spw_cmd_output_fn' type-id='type-id-49' mangled-name='spw_cmd_output_fn' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_output_fn'/>
       <function-decl name='spw_cmd_output_limit' type-id='type-id-48' mangled-name='spw_cmd_output_limit' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_output_limit'/>
@@ -410,20 +426,22 @@
       <function-decl name='spw_cmd_stdio' type-id='type-id-45' mangled-name='spw_cmd_stdio' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_stdio'/>
       <function-decl name='spw_cmd_timeout' type-id='type-id-46' mangled-name='spw_cmd_timeout' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_timeout'/>
       <function-decl name='spw_win_quote' type-id='type-id-24' mangled-name='spw_win_quote' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_win_quote'/>
-      <function-decl name='spw_cmd_destroy' type-id='type-id-59' mangled-name='spw_cmd_destroy' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_destroy'/>
+      <function-decl name='spw_cmd_destroy' type-id='type-id-60' mangled-name='spw_cmd_destroy' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_cmd_destroy'/>
   </abi-instr>
   <abi-instr address-size='64' path='src/spawn_posix.c' language='LANG_C99'>
       <function-decl name='spw_proc_output' type-id='type-id-22' mangled-name='spw_proc_output' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_output'/>
+      <function-decl name='spw_proc_close_input' type-id='type-id-51' mangled-name='spw_proc_close_input' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_close_input'/>
       <function-decl name='spw_proc_kill' type-id='type-id-51' mangled-name='spw_proc_kill' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_kill'/>
       <function-decl name='spw_proc_killed' type-id='type-id-30' mangled-name='spw_proc_killed' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_killed'/>
       <function-decl name='spw_proc_status' type-id='type-id-31' mangled-name='spw_proc_status' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_status'/>
       <function-decl name='spw_proc_terminate' type-id='type-id-51' mangled-name='spw_proc_terminate' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_terminate'/>
-      <function-decl name='spw_proc_wait' type-id='type-id-53' mangled-name='spw_proc_wait' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_wait'/>
+      <function-decl name='spw_proc_wait' type-id='type-id-54' mangled-name='spw_proc_wait' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_wait'/>
+      <function-decl name='spw_proc_write' type-id='type-id-53' mangled-name='spw_proc_write' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_write'/>
       <function-decl name='spw_spawn' type-id='type-id-28' mangled-name='spw_spawn' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_spawn'/>
       <function-decl name='spw_spawn_detached' type-id='type-id-26' mangled-name='spw_spawn_detached' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_spawn_detached'/>
-      <function-decl name='spw_proc_pid' type-id='type-id-55' mangled-name='spw_proc_pid' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_pid'/>
-      <function-decl name='spw_proc_dropped' type-id='type-id-56' mangled-name='spw_proc_dropped' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_dropped'/>
-      <function-decl name='spw_proc_handle' type-id='type-id-57' mangled-name='spw_proc_handle' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_handle'/>
-      <function-decl name='spw_proc_destroy' type-id='type-id-61' mangled-name='spw_proc_destroy' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_destroy'/>
+      <function-decl name='spw_proc_pid' type-id='type-id-56' mangled-name='spw_proc_pid' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_pid'/>
+      <function-decl name='spw_proc_dropped' type-id='type-id-57' mangled-name='spw_proc_dropped' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_dropped'/>
+      <function-decl name='spw_proc_handle' type-id='type-id-58' mangled-name='spw_proc_handle' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_handle'/>
+      <function-decl name='spw_proc_destroy' type-id='type-id-62' mangled-name='spw_proc_destroy' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='spw_proc_destroy'/>
   </abi-instr>
 </abi-corpus>
