@@ -103,6 +103,11 @@ Conventions:
 - `spw_cmd_input` copies the bytes to feed on stdin and switches stdin to `SPW_PIPE`; stdin is
   closed once everything is written. A stdin pipe without input gives the child an
   immediate end of file. A later `spw_cmd_stdio` call on stdin drops the input
+- `spw_cmd_input_open(cmd, 1)` keeps a stdin pipe open after the initial input, for a
+  conversation with the child (a REPL, a line protocol): `spw_proc_write` queues more bytes,
+  written as the pipe accepts them, also during `spw_proc_wait`, and `spw_proc_close_input`
+  ends stdin once the queue is written. `spw_proc_write` returns `SPW_ERR_IO` once stdin is
+  closed, by the caller or because the child stopped reading
 - `spw_cmd_timeout` sets a limit in milliseconds from `spw_spawn`; `0` means none
 - `spw_cmd_kill_grace` makes the time limit ask first: the tree gets `SIGTERM`, and `SIGKILL`
   only if it still runs `grace_ms` later. Windows kills at once
